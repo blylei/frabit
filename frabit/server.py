@@ -44,15 +44,13 @@ from frabit.lockfile import (ServerBackupIdLock, ServerBackupLock,
                              ServerBackupSyncLock, ServerCronLock,
                              ServerWalArchiveLock, ServerWalReceiveLock,
                              ServerWalSyncLock, ServerXLOGDBLock)
-from frabit.postgres import PostgreSQLConnection, StreamingConnection
+from frabit.mysql import PostgreSQLConnection, StreamingConnection
 from frabit.process import ProcessManager
 from frabit.remote_status import RemoteStatusMixin
 from frabit.retention_policies import RetentionPolicyFactory
 from frabit.utils import (FrabitEncoder, file_md5, force_str, fsync_dir,
                           fsync_file, human_readable_timedelta,
-                          is_power_of_two, mkpath, pretty_size, timeout)
-from frabit.wal_archiver import (FileWalArchiver, StreamingWalArchiver,
-                                 WalArchiver)
+                          is_power_of_two, pretty_size, timeout)
 
 PARTIAL_EXTENSION = '.partial'
 PRIMARY_INFO_FILE = 'primary.info'
