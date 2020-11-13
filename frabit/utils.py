@@ -131,9 +131,7 @@ def get_log_levels():
     try:
         level_to_name = logging._levelToName
     except AttributeError:
-        level_to_name = dict([(key, logging._levelNames[key])
-                              for key in logging._levelNames
-                              if isinstance(key, int)])
+        level_to_name = dict([(key, logging._levelNames[key]) for key in logging._levelNames if isinstance(key, int)])
     for level in sorted(level_to_name):
         yield level_to_name[level]
 
@@ -154,9 +152,9 @@ def pretty_size(size, unit=1024):
     for suffix in suffixes:
         if abs(size) < unit or suffix == suffixes[-1]:
             if suffix == suffixes[0]:
-                return "%d %s" % (size, suffix)
+                return "{size} {suffix}".format(size=size, suffix=suffix)
             else:
-                return "%.1f %s" % (size, suffix)
+                return "{size:.1f} {suffix}".format(size=size, suffix=suffix)
         else:
             size /= unit
 
@@ -181,30 +179,30 @@ def human_readable_timedelta(timedelta):
     # 'Day' part
     if time_map['day'] > 0:
         if time_map['day'] == 1:
-            time_list.append('%s day' % time_map['day'])
+            time_list.append('{} day'.format(time_map['day']))
         else:
-            time_list.append('%s days' % time_map['day'])
+            time_list.append('{} days'.format(time_map['day']))
 
     # 'Hour' part
     if time_map['hour'] > 0:
         if time_map['hour'] == 1:
-            time_list.append('%s hour' % time_map['hour'])
+            time_list.append('{} hour'.format(time_map['hour']))
         else:
-            time_list.append('%s hours' % time_map['hour'])
+            time_list.append('{} hours'.format(time_map['hour']))
 
     # 'Minute' part
     if time_map['minute'] > 0:
         if time_map['minute'] == 1:
-            time_list.append('%s minute' % time_map['minute'])
+            time_list.append('{} minute'.format(time_map['minute']))
         else:
-            time_list.append('%s minutes' % time_map['minute'])
+            time_list.append('{} minutes'.format(time_map['minute']))
 
     # 'Second' part
     if time_map['second'] > 0:
         if time_map['second'] == 1:
-            time_list.append('%s second' % time_map['second'])
+            time_list.append('{} second'.format(time_map['second']))
         else:
-            time_list.append('%s seconds' % time_map['second'])
+            time_list.append('{} second'.format(time_map['second']))
 
     human = ', '.join(time_list)
 
@@ -266,7 +264,7 @@ def which(executable, path=None):
     return None
 
 
-class FlyrabbitEncoder(json.JSONEncoder):
+class FrabitEncoder(json.JSONEncoder):
     """
     Custom JSON encoder used for BackupInfo encoding
 
@@ -299,7 +297,7 @@ class FlyrabbitEncoder(json.JSONEncoder):
         if isinstance(obj, Version):
             return str(obj)
         # Let the base class default method raise the TypeError
-        return super(FlyrabbitEncoder, self).default(obj)
+        return super(FrabitEncoder, self).default(obj)
 
 
 def fsync_dir(dir_path):
@@ -491,34 +489,29 @@ def force_str(obj, encoding='utf-8', errors='replace'):
     return obj
 
 
-def redact_passwords(text):
+def redact_passwords(passwd):
     """
-    Redact passwords from the input text.
+    Redact passwords from the input passwd.
 
     Password are found in these two forms:
 
     Keyword/Value Connection Strings:
-    - host=localhost port=5432 dbname=mydb password=SHAME_ON_ME
+    - host=localhost port=3306 dbname=mydb password=SHAME_ON_ME
     Connection URIs:
-    - postgresql://[user[:password]][netloc][:port][/dbname]
+    - mysql://[user[:password]][netloc][:port][/dbname]
 
-    :param str text: Input content
+    :param str passwd: Input content
     :return: String with passwords removed
     """
 
     # Remove passwords as found in key/value connection strings
-    text = re.sub(
-        "password=('(\\'|[^'])+'|[^ '\"]*)",
-        "password=*REDACTED*",
-        text)
+    passwd = re.sub(
+        "password=('(\\'|[^'])+'|[^ '\"]*)", "password=*REDACTED*", passwd)
 
     # Remove passwords in connection URLs
-    text = re.sub(
-        r'(?<=postgresql:\/\/)([^ :@]+:)([^ :@]+)?@',
-        r'\1*REDACTED*@',
-        text)
+    passwd = re.sub(r'(?<=mysql:\/\/)([^ :@]+:)([^ :@]+)?@', r'\1*REDACTED*@', passwd)
 
-    return text
+    return passwd
 
 
 def check_non_negative(value):
@@ -596,7 +589,7 @@ def check_size(value):
         else:
             int_value = int(value)
     except ValueError:
-        raise ArgumentTypeError("'%s' is not a valid size string" % value)
+        raise ArgumentTypeError("'{}' is not a valid size string".format(value))
     if int_value is None or int_value < 1:
-        raise ArgumentTypeError("'%s' is not a valid size string" % value)
+        raise ArgumentTypeError("'{}' is not a valid size string".format(value))
     return int_value
