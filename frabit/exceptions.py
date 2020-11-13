@@ -3,6 +3,8 @@
 #
 # This file is part of Frabit
 #
+
+
 class FrabitException(Exception):
     """
     The base class of all other Frabit exceptions
