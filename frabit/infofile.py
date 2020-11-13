@@ -1,3 +1,9 @@
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# This file is part of Frabit
+#
+
 import ast
 import collections
 import inspect
@@ -10,7 +16,7 @@ import dateutil.tz
 import frabit.compression
 from frabit import binlog
 from frabit.exceptions import BackupInfoBadInitialisation
-from frabit.common import fsync_dir
+from frabit.utils import fsync_dir
 
 # Named tuple representing a Tablespace with 'name' 'oid' and 'location'
 # as property.

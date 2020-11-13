@@ -1,19 +1,8 @@
-# Copyright (C) 2011-2020 2ndQuadrant Limited
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
-# This file is part of Barman.
+# This file is part of Frabit
 #
-# Barman is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Barman is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Barman.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 This module implements the interface with the command line and the logger.
@@ -36,9 +25,9 @@ from frabit.config import RecoveryOptions
 from frabit.exceptions import BadXlogSegmentName, RecoveryException, SyncError
 from frabit.infofile import BackupInfo
 from frabit.server import Server
-from frabit.common import (FlyrabbitEncoder, check_non_negative, check_positive,
-                           configure_logging, drop_privileges, force_str,
-                           get_log_levels, parse_log_level)
+from frabit.utils import (FlyrabbitEncoder, check_non_negative, check_positive,
+                          configure_logging, drop_privileges, force_str,
+                          get_log_levels, parse_log_level)
 
 _logger = logging.getLogger(__name__)
 

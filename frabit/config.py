@@ -1,3 +1,8 @@
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# This file is part of Frabit
+#
 """
 This module is responsible for all the things related to
 Flyrabbit configuration, such as parsing configuration file.

@@ -1,14 +1,8 @@
-# Copyright (C) 2020-2020 blylei Limited
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
-# This file is part of Flyrabbit.
+# This file is part of Frabit
 #
-# Flyrabbit is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Flyrabbit.  If not, see <http://www.gnu.org/licenses/>.
 
 
 class FlyrabbitException(Exception):
@@ -152,7 +146,7 @@ class DataTransferFailure(CommandException):
             return cls(details)
         except (TypeError, NameError):
             # If it is not a dictionary just convert it to a string
-            from frabit.common import force_str
+            from frabit.utils import force_str
             return cls(force_str(e.args))
 
 
@@ -199,7 +193,7 @@ class BinlogHasPurged(MysqlException):
     def __str__(self):
         # Returns the first line
         if self.args and self.args[0]:
-            from frabit.common import force_str
+            from frabit.utils import force_str
             return force_str(self.args[0]).splitlines()[0].strip()
         else:
             return ''

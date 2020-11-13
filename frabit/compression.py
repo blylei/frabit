@@ -1,19 +1,8 @@
-# Copyright (C) 2011-2020 2ndQuadrant Limited
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
-# This file is part of Barman.
+# This file is part of Frabit
 #
-# Barman is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Barman is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Barman.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 This module is responsible to manage the compression features of Barman
@@ -30,7 +19,7 @@ import frabit.infofile
 from frabit.command_wrapper import Command
 from frabit.exceptions import (CommandFailedException,
                                CompressionIncompatibility)
-from frabit.common import force_str, with_metaclass
+from frabit.utils import force_str, with_metaclass
 
 _logger = logging.getLogger(__name__)
 
