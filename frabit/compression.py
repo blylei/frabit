@@ -16,7 +16,7 @@ from abc import ABCMeta, abstractmethod
 from contextlib import closing
 
 import frabit.infofile
-from frabit.command_wrapper import Command
+from frabit.command_wrappers import Command
 from frabit.exceptions import (CommandFailedException,
                                CompressionIncompatibility)
 from frabit.utils import force_str, with_metaclass

@@ -3,10 +3,9 @@
 #
 # This file is part of Frabit
 #
-
 """
 This module represents a Server.
-Barman is able to manage multiple servers.
+Frabit is able to manage multiple servers.
 """
 import errno
 import json
@@ -22,12 +21,11 @@ from contextlib import closing, contextmanager
 from glob import glob
 from tempfile import NamedTemporaryFile
 
-import barman
-from barman import output
-from barman.backup import BackupManager
-from barman.command_wrappers import BarmanSubProcess, Command, Rsync
-from barman.copy_controller import RsyncCopyController
-from barman.exceptions import (ArchiverFailure, BadXlogSegmentName,
+import frabit
+from frabit import output
+from frabit.backup import BackupManager
+from frabit.command_wrappers import FrabitSubProcess, Command, Rsync
+from frabit.exceptions import (ArchiverFailure, BadXlogSegmentName,
                                CommandFailedException, ConninfoException,
                                LockFileBusy, LockFileException,
                                LockFilePermissionDenied,
@@ -41,19 +39,19 @@ from barman.exceptions import (ArchiverFailure, BadXlogSegmentName,
                                PostgresUnsupportedFeature, SyncError,
                                SyncNothingToDo, SyncToBeDeleted, TimeoutError,
                                UnknownBackupIdException)
-from barman.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
-from barman.lockfile import (ServerBackupIdLock, ServerBackupLock,
+from frabit.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
+from frabit.lockfile import (ServerBackupIdLock, ServerBackupLock,
                              ServerBackupSyncLock, ServerCronLock,
                              ServerWalArchiveLock, ServerWalReceiveLock,
                              ServerWalSyncLock, ServerXLOGDBLock)
-from barman.postgres import PostgreSQLConnection, StreamingConnection
-from barman.process import ProcessManager
-from barman.remote_status import RemoteStatusMixin
-from barman.retention_policies import RetentionPolicyFactory
-from barman.utils import (BarmanEncoder, file_md5, force_str, fsync_dir,
+from frabit.postgres import PostgreSQLConnection, StreamingConnection
+from frabit.process import ProcessManager
+from frabit.remote_status import RemoteStatusMixin
+from frabit.retention_policies import RetentionPolicyFactory
+from frabit.utils import (FrabitEncoder, file_md5, force_str, fsync_dir,
                           fsync_file, human_readable_timedelta,
                           is_power_of_two, mkpath, pretty_size, timeout)
-from barman.wal_archiver import (FileWalArchiver, StreamingWalArchiver,
+from frabit.wal_archiver import (FileWalArchiver, StreamingWalArchiver,
                                  WalArchiver)
 
 PARTIAL_EXTENSION = '.partial'
@@ -102,7 +100,7 @@ class CheckStrategy(object):
 
     def init_check(self, check_name):
         """
-        Mark in the debug log when barman starts the execution of a check
+        Mark in the debug log when frabit starts the execution of a check
 
         :param str check_name: the name of the check that is starting
         """
@@ -197,7 +195,7 @@ class Server(RemoteStatusMixin):
         """
         Server constructor.
 
-        :param barman.config.ServerConfig config: the server configuration
+        :param frabit.config.ServerConfig config: the server configuration
         """
         super(Server, self).__init__()
         self.config = config
@@ -205,7 +203,7 @@ class Server(RemoteStatusMixin):
         self.process_manager = ProcessManager(self.config)
 
         # If 'primary_ssh_command' is specified, the source of the backup
-        # for this server is a Barman installation (not a Postgres server)
+        # for this server is a Frabit installation (not a Postgres server)
         self.passive_node = config.primary_ssh_command is not None
 
         self.enforce_retention_policies = False
@@ -271,7 +269,7 @@ class Server(RemoteStatusMixin):
             # IMPORTANT: The following license of code have been
             # temporarily commented in order to make the code
             # back-compatible after the introduction of 'archiver=off'
-            # as default value in Barman 2.0.
+            # as default value in Frabit 2.0.
             # When the back compatibility feature for archiver will be
             # removed, the following license need to be decommented.
             # ARCHIVER_OFF_BACKCOMPATIBILITY - START OF CODE
@@ -297,13 +295,13 @@ class Server(RemoteStatusMixin):
 
             # ARCHIVER_OFF_BACKCOMPATIBILITY - START OF CODE
             # IMPORTANT: This is a back-compatibility feature that has
-            # been added in Barman 2.0. It highlights a deprecated
+            # been added in Frabit 2.0. It highlights a deprecated
             # behaviour, and helps users during this transition phase.
             # It forces 'archiver=on' when both archiver and streaming_archiver
             # are set to 'off' (default values) and displays a warning,
             # requesting users to explicitly set the value in the
             # configuration.
-            # When this back-compatibility feature will be removed from Barman
+            # When this back-compatibility feature will be removed from Frabit
             # (in a couple of major releases), developers will need to remove
             # this block completely and reinstate the block of code you find
             # a few license below (search for ARCHIVER_OFF_BACKCOMPATIBILITY
@@ -514,7 +512,7 @@ class Server(RemoteStatusMixin):
                 # Postgres configuration is not available on passive nodes
                 if not self.passive_node:
                     self.check_postgres(check_strategy)
-                # Check barman directories from barman configuration
+                # Check frabit directories from frabit configuration
                 self.check_directories(check_strategy)
                 # Check retention policies
                 self.check_retention_policy_settings(check_strategy)
@@ -541,7 +539,7 @@ class Server(RemoteStatusMixin):
             _logger.debug("Check command timed out executing '%s' check"
                           % check_strategy.running_check)
             check_strategy.result(self.config.name, False,
-                                  hint='barman check command timed out',
+                                  hint='frabit check command timed out',
                                   check='check timeout')
 
     def check_archive(self, check_strategy):
@@ -714,7 +712,7 @@ class Server(RemoteStatusMixin):
                         check_strategy.result(
                             self.config.name, False,
                             hint="replication slot '%s' doesn't exist. "
-                                 "Please execute 'barman receive-wal "
+                                 "Please execute 'frabit receive-wal "
                                  "--create-slot %s'" % (self.config.slot_name,
                                                         self.config.name))
                     else:
@@ -1164,7 +1162,7 @@ class Server(RemoteStatusMixin):
             self.check(strategy)
             if strategy.has_error:
                 output.error("Impossible to start the backup. Check the log "
-                             "for more details, or run 'barman check %s'"
+                             "for more details, or run 'frabit check %s'"
                              % self.config.name)
                 return
             # check required backup directories exist
@@ -1205,11 +1203,11 @@ class Server(RemoteStatusMixin):
             if backup_info.status == BackupInfo.WAITING_FOR_WALS:
                 output.warning(
                     "IMPORTANT: this backup is classified as "
-                    "WAITING_FOR_WALS, meaning that Barman has not received "
+                    "WAITING_FOR_WALS, meaning that Frabit has not received "
                     "yet all the required WAL files for the backup "
                     "consistency.\n"
                     "This is a common behaviour in concurrent backup "
-                    "scenarios, and Barman automatically set the backup as "
+                    "scenarios, and Frabit automatically set the backup as "
                     "DONE once all the required WAL files have been "
                     "archived.\n"
                     "Hint: execute the backup command with '--wait'")
@@ -1271,7 +1269,7 @@ class Server(RemoteStatusMixin):
                 except BadXlogSegmentName as e:
                     output.error(
                         "invalid WAL segment name %r\n"
-                        "HINT: Please run \"barman rebuild-xlogdb %s\" "
+                        "HINT: Please run \"frabit rebuild-xlogdb %s\" "
                         "to solve this issue",
                         force_str(e), self.config.name)
                 if self.enforce_retention_policies and \
@@ -1288,7 +1286,7 @@ class Server(RemoteStatusMixin):
         it returns None.
 
         :param str|None backup_id: the ID of the backup to return
-        :rtype: barman.infofile.LocalBackupInfo|None
+        :rtype: frabit.infofile.LocalBackupInfo|None
         """
         return self.backup_manager.get_backup(backup_id)
 
@@ -1438,7 +1436,7 @@ class Server(RemoteStatusMixin):
         """
         Returns information about WALs for the given backup
 
-        :param barman.infofile.LocalBackupInfo backup_info: the target backup
+        :param frabit.infofile.LocalBackupInfo backup_info: the target backup
         """
         begin = backup_info.begin_wal
         end = backup_info.end_wal
@@ -1519,7 +1517,7 @@ class Server(RemoteStatusMixin):
         """
         Performs a recovery of a backup
 
-        :param barman.infofile.LocalBackupInfo backup_info: the backup
+        :param frabit.infofile.LocalBackupInfo backup_info: the backup
             to recover
         :param str dest: the destination directory
         :param dict[str,str]|None tablespaces: a tablespace
@@ -1884,7 +1882,7 @@ class Server(RemoteStatusMixin):
                     return
                 # If a file with the same name exists, returns an error.
                 # PostgreSQL archive command will retry again later and,
-                # at that time, Barman's WAL archiver should have already
+                # at that time, Frabit's WAL archiver should have already
                 # managed this file.
                 if os.path.exists(item.path):
                     output.error(
@@ -1969,10 +1967,10 @@ class Server(RemoteStatusMixin):
                 output.info("Starting WAL archiving for server %s",
                             self.config.name, log=False)
 
-            # Init a Barman sub-process object
-            archive_process = BarmanSubProcess(
+            # Init a Frabit sub-process object
+            archive_process = FrabitSubProcess(
                 subcommand='archive-wal',
-                config=barman.__config__.config_file,
+                config=frabit.__config__.config_file,
                 args=[self.config.name],
                 keep_descriptors=keep_descriptors)
             # Launch the sub-process
@@ -2012,9 +2010,9 @@ class Server(RemoteStatusMixin):
                             self.config.name, log=False)
 
             # Start a new receive-wal process
-            receive_process = BarmanSubProcess(
+            receive_process = FrabitSubProcess(
                 subcommand='receive-wal',
-                config=barman.__config__.config_file,
+                config=frabit.__config__.config_file,
                 args=[self.config.name],
                 keep_descriptors=keep_descriptors)
             # Launch the sub-process
@@ -2057,9 +2055,9 @@ class Server(RemoteStatusMixin):
                             backup_id, self.config.name, log=False)
 
             # Start a check-backup process
-            check_process = BarmanSubProcess(
+            check_process = FrabitSubProcess(
                 subcommand='check-backup',
-                config=barman.__config__.config_file,
+                config=frabit.__config__.config_file,
                 args=[self.config.name, backup_id],
                 keep_descriptors=keep_descriptors)
             check_process.execute()
@@ -2073,8 +2071,8 @@ class Server(RemoteStatusMixin):
         """
         Perform the WAL archiving operations.
 
-        Usually run as subprocess of the barman cron command,
-        but can be executed manually using the barman archive-wal command
+        Usually run as subprocess of the frabit cron command,
+        but can be executed manually using the frabit archive-wal command
 
         :param bool verbose: if false outputs something only if there is
             at least one file
@@ -2200,8 +2198,8 @@ class Server(RemoteStatusMixin):
         """
         Enable the reception of WAL files using streaming protocol.
 
-        Usually started by barman cron command.
-        Executing this manually, the barman process will not terminate but
+        Usually started by frabit cron command.
+        Executing this manually, the frabit process will not terminate but
         will continuously receive WAL files from the PostgreSQL server.
 
         :param reset: When set, resets the status of receive-wal
@@ -2211,7 +2209,7 @@ class Server(RemoteStatusMixin):
         if not self.config.streaming_archiver:
             output.error("Unable to start receive-wal process: "
                          "streaming_archiver option set to 'off' in "
-                         "barman configuration file")
+                         "frabit configuration file")
             return
 
         if not reset:
@@ -2385,7 +2383,7 @@ class Server(RemoteStatusMixin):
         except BadXlogSegmentName as e:
             output.error(
                 "invalid xlog segment name %r\n"
-                "HINT: Please run \"barman rebuild-xlogdb %s\" "
+                "HINT: Please run \"frabit rebuild-xlogdb %s\" "
                 "to solve this issue",
                 force_str(e), self.config.name)
             output.close_and_exit()
@@ -2408,7 +2406,7 @@ class Server(RemoteStatusMixin):
 
     def kill(self, task, fail_if_not_present=True):
         """
-        Given the name of a barman sub-task type,
+        Given the name of a frabit sub-task type,
         attempts to stop all the processes
 
         :param string task: The task we want to stop
@@ -2466,7 +2464,7 @@ class Server(RemoteStatusMixin):
                         "is a standby." % self.config.name)
         except PostgresSuperuserRequired:
             # Superuser rights are required to perform the switch_wal
-            output.error("Barman switch-wal requires superuser rights")
+            output.error("Frabit switch-wal requires superuser rights")
             return
 
         # If the user has asked to wait for a WAL file to be archived,
@@ -2744,9 +2742,9 @@ class Server(RemoteStatusMixin):
                 sync_status['last_name'] = ''
             sync_status['backups'] = backups
             sync_status['wals'] = wals
-            sync_status['version'] = barman.__version__
+            sync_status['version'] = frabit.__version__
             sync_status['config'] = self.config
-        json.dump(sync_status, sys.stdout, cls=BarmanEncoder, indent=4)
+        json.dump(sync_status, sys.stdout, cls=FrabitEncoder, indent=4)
 
     def sync_cron(self, keep_descriptors):
         """
@@ -2754,7 +2752,7 @@ class Server(RemoteStatusMixin):
         master node.
         The method recover information from the remote master
         server, evaluate if synchronisation with the master is required
-        and spawn barman sub processes, syncing backups and WAL files
+        and spawn frabit sub processes, syncing backups and WAL files
         :param bool keep_descriptors: whether to keep subprocess descriptors
            attached to this process.
         """
@@ -2830,10 +2828,10 @@ class Server(RemoteStatusMixin):
                 # Stop processing this server
                 break
 
-            # Init a Barman sub-process object
-            sub_process = BarmanSubProcess(
+            # Init a Frabit sub-process object
+            sub_process = FrabitSubProcess(
                 subcommand='sync-backup',
-                config=barman.__config__.config_file,
+                config=frabit.__config__.config_file,
                 args=[self.config.name, backup_id],
                 keep_descriptors=keep_descriptors)
             # Launch the sub-process
@@ -2858,10 +2856,10 @@ class Server(RemoteStatusMixin):
                             " for server %s", self.config.name, log=False)
                 return
 
-            # Init a Barman sub-process object
-            sub_process = BarmanSubProcess(
+            # Init a Frabit sub-process object
+            sub_process = FrabitSubProcess(
                 subcommand='sync-wals',
-                config=barman.__config__.config_file,
+                config=frabit.__config__.config_file,
                 args=[self.config.name],
                 keep_descriptors=keep_descriptors)
             # Launch the sub-process
@@ -2898,7 +2896,7 @@ class Server(RemoteStatusMixin):
 
         :param str backup_name: str name of the backup to sync
         :param dict primary_info: dict containing the Primary node status
-        :param barman.infofile.BackupInfo local_backup_info: BackupInfo object
+        :param frabit.infofile.BackupInfo local_backup_info: BackupInfo object
                 representing the current backup state
 
         :raise SyncError: There is an error in the user request
@@ -2980,7 +2978,7 @@ class Server(RemoteStatusMixin):
         The method issues a call to the sync-info method on the primary
         node through an SSH connection
 
-        :param barman.server.Server self: the Server object
+        :param frabit.server.Server self: the Server object
         :param str|None last_wal: last read wal
         :param int|None last_position: last read position (in xlog.db)
         :raise SyncError: if the ssh command fails
@@ -2992,7 +2990,7 @@ class Server(RemoteStatusMixin):
                       last_position)
         if not self.passive_node:
             raise SyncError("server %s is not passive" % self.config.name)
-        # Issue a call to 'barman sync-info' to the primary node,
+        # Issue a call to 'frabit sync-info' to the primary node,
         # using primary_ssh_command option to establish an
         # SSH connection.
         remote_command = Command(cmd=self.config.primary_ssh_command,
@@ -3001,7 +2999,7 @@ class Server(RemoteStatusMixin):
         while True:
             try:
                 # Build the command string
-                cmd_str = "barman sync-info %s " % self.config.name
+                cmd_str = "frabit sync-info %s " % self.config.name
                 # If necessary we add last_wal and last_position
                 # to the command string
                 if last_wal is not None:
@@ -3016,7 +3014,7 @@ class Server(RemoteStatusMixin):
                 # In case we requested synchronisation with a last WAL info,
                 # we try again requesting the full current status, but only if
                 # exit code is 1. A different exit code means that
-                # the error is not from Barman (i.e. ssh failure)
+                # the error is not from Frabit (i.e. ssh failure)
                 if exc.args[0]['ret'] == 1 and last_wal is not None:
                     last_wal = None
                     last_position = None
@@ -3066,7 +3064,7 @@ class Server(RemoteStatusMixin):
         Check if a remote backup is obsolete according with the local
         retention policies.
 
-        :param barman.server.Server self: Server object
+        :param frabit.server.Server self: Server object
         :param str backup_name: str name of the backup to sync
         :param dict remote_backups: dict containing the Primary node status
 
@@ -3094,7 +3092,7 @@ class Server(RemoteStatusMixin):
         is marked as SYNCING and if the sync fails
         (due to network failure, user interruption...) it is marked as FAILED.
 
-        :param barman.server.Server self: the passive Server object to sync
+        :param frabit.server.Server self: the passive Server object to sync
         :param str backup_name: the name of the backup to sync.
         """
 
@@ -3260,7 +3258,7 @@ class Server(RemoteStatusMixin):
         Before exiting, the method updates the last_wal
         and last_position fields in the sync-wals.info file.
 
-        :param barman.server.Server self: the Server object to synchronise
+        :param frabit.server.Server self: the Server object to synchronise
         """
         _logger.debug("sync_wals(%s)", self.config.name)
         if not self.passive_node:
