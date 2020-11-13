@@ -3,59 +3,57 @@
 #
 # This file is part of Frabit
 #
-
-
-class FlyrabbitException(Exception):
+class FrabitException(Exception):
     """
-    The base class of all other Flyrabbit exceptions
+    The base class of all other Frabit exceptions
     """
 
 
-class ConfigurationException(FlyrabbitException):
+class ConfigurationException(FrabitException):
     """
     Base exception for all the Configuration errors
     """
 
 
-class CommandException(FlyrabbitException):
+class CommandException(FrabitException):
     """
     Base exception for all the errors related to
     the execution of a Command.
     """
 
 
-class CompressionException(FlyrabbitException):
+class CompressionException(FrabitException):
     """
     Base exception for all the errors related to
     the execution of a compression action.
     """
 
 
-class MysqlException(FlyrabbitException):
+class MysqlException(FrabitException):
     """
     Base exception for all the errors related to PostgreSQL.
     """
 
 
-class BackupException(FlyrabbitException):
+class BackupException(FrabitException):
     """
     Base exception for all the errors related to the execution of a backup.
     """
 
 
-class HookScriptException(FlyrabbitException):
+class HookScriptException(FrabitException):
     """
     Base exception for all the errors related to Hook Script execution.
     """
 
 
-class LockFileException(FlyrabbitException):
+class LockFileException(FrabitException):
     """
     Base exception for lock related errors
     """
 
 
-class SyncException(FlyrabbitException):
+class SyncException(FrabitException):
     """
     Base Exception for synchronisation functions
     """
@@ -224,7 +222,7 @@ class AbortedRetryHookScript(HookScriptException):
                 self.hook.script, self.hook.exit_status))
 
 
-class RecoveryException(FlyrabbitException):
+class RecoveryException(FrabitException):
     """
     Exception for a recovery error
     """
