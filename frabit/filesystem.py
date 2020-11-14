@@ -11,14 +11,15 @@ from frabit.exceptions import FsOperationFailed
 
 _logger = logging.getLogger(__name__)
 
-class UnixLocalCommand(object):
+
+class UnixLocalCommand:
     """
     This class is a wrapper for local calls for file system operations
     """
 
     def __init__(self, path=None):
         # initialize a shell
-        self.internal_cmd = Command(cmd='sh', args=['-c'], path=path)
+        self.internal_cmd = Command(cmd='bash', args=['-c'], path=path)
 
     def cmd(self, cmd_name, args=[]):
         """
@@ -42,7 +43,7 @@ class UnixLocalCommand(object):
 
         :param str dir_path: full path for the directory
         """
-        _logger.debug('Create directory %s if it does not exists' % dir_path)
+        _logger.debug('Create directory {} if it does not exists'.format(dir_path))
         exists = self.exists(dir_path)
         if exists:
             is_dir = self.cmd('test', args=['-d', dir_path])
@@ -69,7 +70,7 @@ class UnixLocalCommand(object):
 
         :param path the full path for the directory
         """
-        _logger.debug('Delete path %s if exists' % path)
+        _logger.debug('Delete path {} if exists'.format(path))
         exists = self.exists(path, False)
         if exists:
             rm_ret = self.cmd('rm', args=['-fr', path])
@@ -89,7 +90,7 @@ class UnixLocalCommand(object):
 
             :param dir_path full path for the directory
         """
-        _logger.debug('Check if directory %s exists' % dir_path)
+        _logger.debug('Check if directory {} exists'.format(dir_path))
         exists = self.exists(dir_path)
         if exists:
             is_dir = self.cmd('test', args=['-d', dir_path])
@@ -111,7 +112,7 @@ class UnixLocalCommand(object):
 
             :param dir_path full dir_path for the directory to check
         """
-        _logger.debug('Check if directory %s is writable' % dir_path)
+        _logger.debug('Check if directory {} is writable'.format(dir_path))
         exists = self.exists(dir_path)
         if exists:
             is_dir = self.cmd('test', args=['-d', dir_path])
@@ -131,7 +132,7 @@ class UnixLocalCommand(object):
             else:
                 raise FsOperationFailed('%s is not a directory' % dir_path)
         else:
-            raise FsOperationFailed('%s does not exists' % dir_path)
+            raise FsOperationFailed('{} does not exists'.format(dir_path))
 
     def create_symbolic_link(self, src, dst):
         """
@@ -144,7 +145,7 @@ class UnixLocalCommand(object):
             :param src full path to the source of the symlink
             :param dst full path for the destination of the symlink
         """
-        _logger.debug('Create symbolic link %s -> %s' % (dst, src))
+        _logger.debug('Create symbolic link {dst} -> {src}'.format(dst=dst, src=src))
         exists = self.exists(src)
         if exists:
             exists_dst = self.exists(dst)
@@ -161,7 +162,7 @@ class UnixLocalCommand(object):
 
     def get_system_info(self):
         """
-            Gather important system information for 'barman diagnose' command
+            Gather important system information for 'frabit diagnose' command
         """
         result = {}
         # self.internal_cmd.out can be None. The str() call will ensure it
@@ -224,8 +225,7 @@ class UnixLocalCommand(object):
         Check for the existence of a path.
 
         :param str path: full path to check
-        :param bool dereference: whether dereference symlinks, defaults
-            to True
+        :param bool dereference: whether dereference symlinks, defaults to True
         :return bool: if the file exists or not.
         """
         _logger.debug('check for existence of: %s' % path)
@@ -287,20 +287,16 @@ class UnixRemoteCommand(UnixLocalCommand):
 
         if ssh_command is None:
             raise FsOperationFailed('No ssh command provided')
-        self.internal_cmd = Command(ssh_command,
-                                    args=ssh_options,
-                                    path=path,
-                                    shell=True)
+        self.internal_cmd = Command(ssh_command, args=ssh_options, path=path, shell=True)
         try:
             ret = self.cmd("true")
         except OSError:
             raise FsOperationFailed("Unable to execute %s" % ssh_command)
         if ret != 0:
             raise FsOperationFailed(
-                "Connection failed using '%s %s' return code %s" % (
-                    ssh_command,
-                    ' '.join(ssh_options),
-                    ret))
+                "Connection failed using '{cmd} {option}' return code {ret}".format(cmd=ssh_command,
+                                                                                    option=' '.join(ssh_options),
+                                                                                    ret=ret))
 
 
 def path_allowed(exclude, include, path, is_dir):
