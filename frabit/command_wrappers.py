@@ -84,10 +84,9 @@ class Command:
     Wrapper for a system command
     """
 
-    def __init__(self, cmd, args=None, env_append=None, path=None, shell=False,
-                 check=False, allowed_retval=(0,),
-                 close_fds=True, out_handler=None, err_handler=None,
-                 retry_times=0, retry_sleep=0, retry_handler=None):
+    def __init__(self, cmd, args=None, env_append=None, path=None, shell=False, check=False, allowed_retval=(0,),
+                 close_fds=True, out_handler=None, err_handler=None, retry_times=0, retry_sleep=0,
+                 retry_handler=None):
         """
         If the `args` argument is specified the arguments will be always added
         to the ones eventually passed with the actual invocation.
@@ -552,29 +551,22 @@ class Rsync(Command):
     which is used vastly by frabit
     """
 
-    def __init__(self, rsync='rsync', args=None, ssh=None, ssh_options=None,
-                 bwlimit=None, exclude=None, exclude_and_protect=None,
-                 include=None, network_compression=None, path=None, **kwargs):
+    def __init__(self, rsync='rsync', args=None, ssh=None, ssh_options=None, bwlimit=None, exclude=None,
+                 exclude_and_protect=None, include=None, network_compression=None, path=None, **kwargs):
         """
         :param str rsync: rsync executable name
-        :param list[str]|None args: List of additional argument to always
-            append
-        :param str ssh: the ssh executable to be used when building
-            the `-e` argument
-        :param list[str] ssh_options: the ssh options to be used when building
-            the `-e` argument
+        :param list[str]|None args: List of additional argument to always append
+        :param str ssh: the ssh executable to be used when building the `-e` argument
+        :param list[str] ssh_options: the ssh options to be used when building the `-e` argument
         :param str bwlimit: optional bandwidth limit
         :param list[str] exclude: list of file to be excluded from the copy
-        :param list[str] exclude_and_protect: list of file to be excluded from
-            the copy, preserving the destination if exists
-        :param list[str] include: list of files to be included in the copy
-            even if excluded.
+        :param list[str] exclude_and_protect: list of file to be excluded from the copy, preserving the destination
+        if exists
+        :param list[str] include: list of files to be included in the copy even if excluded.
         :param bool network_compression: enable the network compression
         :param str path: PATH to be used while searching for `cmd`
-        :param bool check: Raise a CommandFailedException if the exit code
-            is not present in `allowed_retval`
-        :param list[int] allowed_retval: List of exit codes considered as a
-            successful termination.
+        :param bool check: Raise a CommandFailedException if the exit code is not present in `allowed_retval`
+        :param list[int] allowed_retval: List of exit codes considered as a successful termination.
         """
         options = []
         if ssh:
@@ -646,7 +638,7 @@ class MySQLClient(Command):
     Superclass of all the MySQL client commands.
     """
 
-    COMMAND_ALTERNATIVES = None
+    COMMAND_ALTERNATIVES = ['mysql']
     """
     This is a list of command names to be used to find the installed command.
     """
