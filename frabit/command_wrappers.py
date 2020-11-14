@@ -3,7 +3,6 @@
 #
 # This file is part of Frabit
 #
-
 from __future__ import print_function
 
 import errno
@@ -176,8 +175,7 @@ class Command:
         if not self.shell:
             full_path = frabit.utils.which(self.cmd, self.path)
             if not full_path:
-                raise CommandFailedException(
-                    '%s not in PATH' % self.cmd)
+                raise CommandFailedException('{} not in PATH'.format(self.cmd))
             self.cmd = full_path
         # If env_append contains anything, build an env dict to be used during
         # subprocess call, otherwise set it to None and let the subprocesses
@@ -377,8 +375,7 @@ class Command:
         out_handler = kwargs.pop('out_handler', self.out_handler)
         err_handler = kwargs.pop('err_handler', self.err_handler)
         if len(kwargs):
-            raise TypeError('%s() got an unexpected keyword argument %r' %
-                            (inspect.stack()[1][3], kwargs.popitem()[0]))
+            raise TypeError('{}() got an unexpected keyword argument {}'.format(inspect.stack()[1][3], kwargs.popitem()[0]))
 
         # Reset status
         self.ret = None
@@ -491,9 +488,9 @@ class Command:
         def handler(line):
             if line:
                 if prefix:
-                    class_logger.log(level, "%s%s", prefix, line)
+                    class_logger.log(level, "{prefix}{line}".format(prefix=prefix, line=line))
                 else:
-                    class_logger.log(level, "%s", line)
+                    class_logger.log(level, "{}".format(line))
         return handler
 
     @staticmethod
@@ -515,9 +512,9 @@ class Command:
         def handler(line):
             if line:
                 if prefix:
-                    output.info("%s%s", prefix, line)
+                    output.info("{prefix}{line}".format(prefix=prefix, line=line))
                 else:
-                    output.info("%s", line)
+                    output.info("{}".format(line))
 
         return handler
 
@@ -589,10 +586,10 @@ class Rsync(Command):
         # when rsync finds the files to send.
         if include:
             for pattern in include:
-                options += ["--include=%s" % (pattern,)]
+                options += ["--include={}".format(pattern)]
         if exclude:
             for pattern in exclude:
-                options += ["--exclude=%s" % (pattern,)]
+                options += ["--exclude={}".format(pattern)]
         if exclude_and_protect:
             for pattern in exclude_and_protect:
                 options += ["--exclude=%s" % (pattern,),
@@ -600,7 +597,7 @@ class Rsync(Command):
         if args:
             options += self._args_for_suse(args)
         if bwlimit is not None and bwlimit > 0:
-            options += ["--bwlimit=%s" % bwlimit]
+            options += ["--bwlimit={}".format(bwlimit)]
 
         # By default check is on and the allowed exit code are 0 and 24
         if 'check' not in kwargs:
@@ -638,79 +635,79 @@ class Rsync(Command):
             raise TypeError("from_file_list() doesn't support 'stdin' "
                             "keyword argument")
         input_string = ('\n'.join(filelist)).encode('UTF-8')
-        _logger.debug("from_file_list: %r", filelist)
+        _logger.debug("from_file_list: {}".format(filelist))
         kwargs['stdin'] = input_string
         self.get_output('--files-from=-', src, dst, *args, **kwargs)
         return self.ret
 
 
-class RsyncPgData(Rsync):
+class XtraBackup(Command):
     """
-    This class is a wrapper for rsync, specialised in sync-ing the
-    Postgres data directory
-    """
-
-    def __init__(self, rsync='rsync', args=None, **kwargs):
-        """
-        Constructor
-
-        :param str rsync: command to run
-        """
-        options = ['-rLKpts', '--delete-excluded', '--inplace']
-        if args:
-            options += args
-        Rsync.__init__(self, rsync, args=options, **kwargs)
-
-
-class MySQLClient(Command):
-    """
-    Superclass of all the PostgreSQL client commands.
+    Wrapper class for the xtrabackup system command
     """
 
-    COMMAND_ALTERNATIVES = None
-    """
-    Sometimes the name of a command has been changed during the PostgreSQL
-    evolution. I.e. that happened with pg_receivexlog, that has been renamed
-    to pg_receivewal. In that case, we should try using pg_receivewal (the
-    newer auternative) and, if that command doesn't exist, we should try
-    using `pg_receivewal`.
-
-    This is a list of command names to be used to find the installed command.
-    """
+    COMMAND_ALTERNATIVES = ['xtrabackup']
 
     def __init__(self,
                  connection,
+                 targetdir,
                  command,
                  version=None,
                  app_name=None,
-                 path=None,
+                 bwlimit=None,
+                 tbs_mapping=None,
+                 check=True,
+                 args=None,
                  **kwargs):
         """
         Constructor
 
-        :param PostgreSQL connection: an object representing
+        :param MySQL connection: an object representing
           a database connection
+        :param str targetdir: destination directory path
+        :param str command: the command to use
+        :param Version version: the command version
+        :param str app_name: the application name to use for the connection
+        :param str bwlimit: bandwidth limit for pg_basebackup
+        :param Dict[str, str] tbs_mapping: used for tablespace
+        :param bool check: check if the return value is in the list of
+          allowed values of the Command obj
+        :param List[str] args: additional arguments
+        """
+        MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
+                             check=check, **kwargs)
+
+        # Set the backup destination
+        self.args += ['-v', '--no-password', '--targetdir={}'.format(targetdir)]
+
+
+class MySQLClient(Command):
+    """
+    Superclass of all the MySQL client commands.
+    """
+
+    COMMAND_ALTERNATIVES = None
+    """
+    This is a list of command names to be used to find the installed command.
+    """
+    def __init__(self, connection, command, version=None, app_name=None, path=None, **kwargs):
+        """
+        Constructor
+
+        :param MySQL connection: an object representing a database connection
         :param str command: the command to use
         :param Version version: the command version
         :param str app_name: the application name to use for the connection
         :param str path: additional path for executable retrieval
         """
         Command.__init__(self, command, path=path, **kwargs)
-
-        if version and version >= Version("9.3"):
-            # If version of the client is >= 9.3 we use the connection
-            # string because allows the user to use all the parameters
-            # supported by the libpq library to create a connection
-            conn_string = connection.get_connection_string(app_name)
-            self.args.append("--dbname=%s" % conn_string)
-        else:
-            # 9.2 version doesn't support
-            # connection strings so the 'split' version of the conninfo
-            # option is used instead.
-            conn_params = connection.conn_parameters
-            self.args.append("--host=%s" % conn_params.get('host', None))
-            self.args.append("--port=%s" % conn_params.get('port', None))
-            self.args.append("--username=%s" % conn_params.get('user', None))
+        # connection strings so the 'split' version of the conninfo
+        # option is used instead.
+        conn_params = connection.conn_parameters
+        self.args.append("--host={}".format(conn_params.get('host', None)))
+        self.args.append("--port={}".format(conn_params.get('port', None)))
+        self.args.append("--user={}".format(conn_params.get('user', None)))
+        self.args.append("--password={}".format(conn_params.get('passwd', None)))
 
         self.enable_signal_forwarding(signal.SIGINT)
         self.enable_signal_forwarding(signal.SIGTERM)
@@ -730,10 +727,6 @@ class MySQLClient(Command):
         # To search for an available command, testing if the command
         # exists in PATH is not sufficient. Debian will install wrappers for
         # all commands, even if the real command doesn't work.
-        #
-        # I.e. we may have a wrapper for `pg_receivewal` even it PostgreSQL
-        # 10 isn't installed.
-        #
         # This is an example of what can happen in this case:
         #
         # ```
@@ -747,8 +740,7 @@ class MySQLClient(Command):
         # ```
         #
         # That means we should not only ensure the existence of the command,
-        # but we also need to invoke the command to see if it is a shim
-        # or not.
+        # but we also need to invoke the command to see if it is a shim or not.
 
         # Get the system path if needed
         if path is None:
@@ -779,31 +771,25 @@ class MySQLClient(Command):
                     continue
 
         # We don't have such a command
-        raise CommandFailedException(
-            'command not in PATH, tried: %s' %
-            ' '.join(cls.COMMAND_ALTERNATIVES))
+        raise CommandFailedException('command not in PATH, tried: {}'.format(' '.join(cls.COMMAND_ALTERNATIVES)))
 
     @classmethod
     def get_version_info(cls, path=None):
         """
-        Return a dictionary containing all the info about
-        the version of the PostgreSQL client
+        Return a dictionary containing all the info about the version of the MySQL client
 
         :param str path: the PATH env
         """
         if cls.COMMAND_ALTERNATIVES is None:
-            raise NotImplementedError(
-                "get_version_info cannot be invoked on %s" % cls.__name__)
+            raise NotImplementedError("get_version_info cannot be invoked on {}".format(cls.__name__))
 
-        version_info = dict.fromkeys(
-            ('full_path', 'full_version', 'major_version'),
-            None)
+        version_info = dict.fromkeys(('full_path', 'full_version', 'major_version'), None)
 
         # Get the version string
         try:
             command = cls.find_command(path)
         except CommandFailedException as e:
-            _logger.debug("Error invoking %s: %s", cls.__name__, e)
+            _logger.debug("Error invoking {name}: {e}".format(name=cls.__name__, e=e))
             return version_info
 
         version_info['full_path'] = command.cmd
@@ -815,101 +801,25 @@ class MySQLClient(Command):
             full_version = re.sub(r'\s*\([^)]*\)', '', full_version)
             full_version = full_version.split()[1]
         except IndexError:
-            _logger.debug("Error parsing %s version output",
-                          version_info['full_path'])
+            _logger.debug("Error parsing {} version output".format(version_info['full_path']))
             return version_info
 
         if not re.match(r'(\d+)(\.(\d+)|devel|beta|alpha|rc).*', full_version):
-            _logger.debug("Error parsing %s version output",
-                          version_info['full_path'])
+            _logger.debug("Error parsing {} version output".format(version_info['full_path']))
             return version_info
 
         # Extract the major version
         version_info['full_version'] = Version(full_version)
-        version_info['major_version'] = Version(frabit.utils.simplify_version(
-            full_version))
-
+        version_info['major_version'] = Version(frabit.utils.simplify_version(full_version))
         return version_info
 
 
-class PgBaseBackup(MySQLClient):
+class Mysqlbinlog(MySQLClient):
     """
-    Wrapper class for the pg_basebackup system command
-    """
-
-    COMMAND_ALTERNATIVES = ['pg_basebackup']
-
-    def __init__(self,
-                 connection,
-                 destination,
-                 command,
-                 version=None,
-                 app_name=None,
-                 bwlimit=None,
-                 tbs_mapping=None,
-                 immediate=False,
-                 check=True,
-                 args=None,
-                 **kwargs):
-        """
-        Constructor
-
-        :param PostgreSQL connection: an object representing
-          a database connection
-        :param str destination: destination directory path
-        :param str command: the command to use
-        :param Version version: the command version
-        :param str app_name: the application name to use for the connection
-        :param str bwlimit: bandwidth limit for pg_basebackup
-        :param Dict[str, str] tbs_mapping: used for tablespace
-        :param bool immediate: fast checkpoint identifier for pg_basebackup
-        :param bool check: check if the return value is in the list of
-          allowed values of the Command obj
-        :param List[str] args: additional arguments
-        """
-        MySQLClient.__init__(
-            self,
-            connection=connection, command=command,
-            version=version, app_name=app_name,
-            check=check, **kwargs)
-
-        # Set the backup destination
-        self.args += ['-v', '--no-password', '--pgdata=%s' % destination]
-
-        if version and version >= Version("10"):
-            # If version of the client is >= 10 it would use
-            # a temporary replication slot by default to keep WALs.
-            # We don't need it because Frabit already stores the full
-            # WAL stream, so we disable this feature to avoid wasting one slot.
-            self.args += ['--no-slot']
-            # We also need to specify that we do not want to fetch any WAL file
-            self.args += ['--wal-method=none']
-
-        # The tablespace mapping option is repeated once for each tablespace
-        if tbs_mapping:
-            for (tbs_source, tbs_destination) in tbs_mapping.items():
-                self.args.append('--tablespace-mapping=%s=%s' %
-                                 (tbs_source, tbs_destination))
-
-        # Only global bandwidth limit is supported
-        if bwlimit is not None and bwlimit > 0:
-            self.args.append("--max-rate=%s" % bwlimit)
-
-        # Immediate checkpoint
-        if immediate:
-            self.args.append("--checkpoint=fast")
-
-        # Manage additional args
-        if args:
-            self.args += args
-
-
-class PgReceiveXlog(MySQLClient):
-    """
-    Wrapper class for pg_receivexlog
+    Wrapper class for mysqlbinlog
     """
 
-    COMMAND_ALTERNATIVES = ["pg_receivewal", "pg_receivexlog"]
+    COMMAND_ALTERNATIVES = ["mysqlbinlog"]
 
     def __init__(self,
                  connection,
@@ -919,23 +829,56 @@ class PgReceiveXlog(MySQLClient):
                  app_name=None,
                  synchronous=False,
                  check=True,
-                 slot_name=None,
                  args=None,
                  **kwargs):
         """
         Constructor
 
-        :param PostgreSQL connection: an object representing
-          a database connection
+        :param MySQL connection: an object representing a database connection
         :param str destination: destination directory path
         :param str command: the command to use
         :param Version version: the command version
         :param str app_name: the application name to use for the connection
         :param bool synchronous: request synchronous WAL streaming
-        :param bool check: check if the return value is in the list of
-          allowed values of the Command obj
-        :param str slot_name: the replication slot name to use for the
-          connection
+        :param bool check: check if the return value is in the list of allowed values of the Command obj
+        :param List[str] args: additional arguments
+        """
+        MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
+                             check=check, **kwargs)
+
+        self.args += ["--verbose", "--no-loop", "--no-password", "--directory={}".format(destination)]
+
+        # Manage additional args
+        if args:
+            self.args += args
+
+
+class Mysqldump(MySQLClient):
+    """
+    Wrapper class for mysqldump
+    """
+
+    COMMAND_ALTERNATIVES = ["mysqldump"]
+
+    def __init__(self,
+                 connection,
+                 destination,
+                 command,
+                 version=None,
+                 app_name=None,
+                 check=True,
+                 args=None,
+                 **kwargs):
+        """
+        Constructor
+
+        :param MySQL connection: an object representing a database connection
+        :param str destination: destination directory path
+        :param str command: the command to use
+        :param Version version: the command version
+        :param str app_name: the application name to use for the connection
+        :param bool synchronous: request synchronous WAL streaming
+        :param bool check: check if the return value is in the list of allowed values of the Command obj
         :param List[str] args: additional arguments
         """
         MySQLClient.__init__(
@@ -944,18 +887,42 @@ class PgReceiveXlog(MySQLClient):
             version=version, app_name=app_name,
             check=check, **kwargs)
 
-        self.args += [
-            "--verbose",
-            "--no-loop",
-            "--no-password",
-            "--directory=%s" % destination]
+        self.args += ["--verbose", "--no-loop", "--no-password", "--directory={}".format(destination)]
+        # Manage additional args
+        if args:
+            self.args += args
 
-        # Add the replication slot name if set in the configuration.
-        if slot_name is not None:
-            self.args.append('--slot=%s' % slot_name)
-        # Request synchronous mode
-        if synchronous:
-            self.args.append('--synchronous')
+
+class Mysqlpump(MySQLClient):
+    """
+    Wrapper class for mysqlpump
+    """
+
+    COMMAND_ALTERNATIVES = ["mysqlpump"]
+
+    def __init__(self,
+                 connection,
+                 destination,
+                 command,
+                 version=None,
+                 check=True,
+                 args=None,
+                 **kwargs):
+        """
+        Constructor
+
+        :param MySQL connection: an object representing
+          a database connection
+        :param str destination: destination directory path
+        :param str command: the command to use
+        :param Version version: the command version
+        :param str app_name: the application name to use for the connection
+        :param bool check: check if the return value is in the list of allowed values of the Command obj
+        :param List[str] args: additional arguments
+        """
+        MySQLClient.__init__(self, connection=connection, command=command, version=version, check=check, **kwargs)
+
+        self.args += ["--verbose", "--no-loop", "--no-password", "--directory={}".format(destination)]
 
         # Manage additional args
         if args:
@@ -967,8 +934,7 @@ class FrabitSubProcess:
     Wrapper class for frabit sub instances
     """
 
-    def __init__(self, command=sys.argv[0], subcommand=None,
-                 config=None, args=None, keep_descriptors=False):
+    def __init__(self, command=sys.argv[0], subcommand=None, config=None, args=None, keep_descriptors=False):
         """
         Build a specific wrapper for all the frabit sub-commands,
         providing an unified interface.
@@ -976,10 +942,9 @@ class FrabitSubProcess:
         :param str command: path to frabit
         :param str subcommand: the frabit sub-command
         :param str config: path to the frabit configuration file.
-        :param list[str] args: a list containing the sub-command args
-            like the target server name
-        :param bool keep_descriptors: whether to keep the subprocess stdin,
-            stdout, stderr descriptors attached. Defaults to False
+        :param list[str] args: a list containing the sub-command args like the target server name
+        :param bool keep_descriptors: whether to keep the subprocess stdin,  stdout, stderr descriptors attached.
+         Defaults to False
         """
         # The config argument is needed when the user explicitly
         # passes a configuration file, as the child process
@@ -994,8 +959,7 @@ class FrabitSubProcess:
         # * be sure to run it with the right python interpreter
         # * pass the current configuration file with -c
         # * set it quiet with -q
-        self.command = [sys.executable, command,
-                        '-c', config, '-q', subcommand]
+        self.command = [sys.executable, command, '-c', config, '-q', subcommand]
         self.keep_descriptors = keep_descriptors
         # Handle args for the sub-command (like the server name)
         if args:
@@ -1005,23 +969,17 @@ class FrabitSubProcess:
         """
         Execute the command and pass the output to the configured handlers
         """
-        _logger.debug("FrabitSubProcess: %r", self.command)
+        _logger.debug("FrabitSubProcess: {}".format(self.command))
         # Redirect all descriptors to /dev/null
         devnull = open(os.devnull, 'a+')
 
         additional_arguments = {}
         if not self.keep_descriptors:
-            additional_arguments = {
-                'stdout': devnull,
-                'stderr': devnull
-            }
+            additional_arguments = {'stdout': devnull, 'stderr': devnull}
 
-        proc = subprocess.Popen(
-            self.command,
-            preexec_fn=os.setsid, close_fds=True,
-            stdin=devnull, **additional_arguments)
-        _logger.debug("FrabitSubProcess: subprocess started. pid: %s",
-                      proc.pid)
+        proc = subprocess.Popen(self.command, preexec_fn=os.setsid, close_fds=True, stdin=devnull,
+                                **additional_arguments)
+        _logger.debug("FrabitSubProcess: subprocess started. pid: {}".format(proc.pid))
 
 
 def shell_quote(arg):
@@ -1054,7 +1012,7 @@ def shell_quote(arg):
     # a backslash, and then start another string using a quote character.
 
     assert arg is not None
-    return "'%s'" % arg.replace("'", "'\\''")
+    return "'{}'".format(arg.replace("'", "'\\''"))
 
 
 def full_command_quote(command, args=None):
@@ -1066,7 +1024,7 @@ def full_command_quote(command, args=None):
     :rtype: str
     """
     if args is not None and len(args) > 0:
-        return "%s %s" % (
-            command, ' '.join([shell_quote(arg) for arg in args]))
+        args = ' '.join([shell_quote(arg) for arg in args])
+        return "{cmd} {args}".format(cmd=command, args=args)
     else:
         return command
