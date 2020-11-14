@@ -264,12 +264,12 @@ class Server(RemoteStatusMixin):
                     self.config.msg_list.append('Unable to initialise the '
                                                 'streaming archiver')
 
-            # IMPORTANT: The following license of code have been
+            # IMPORTANT: The following LICENSE of code have been
             # temporarily commented in order to make the code
             # back-compatible after the introduction of 'archiver=off'
             # as default value in Frabit 2.0.
             # When the back compatibility feature for archiver will be
-            # removed, the following license need to be decommented.
+            # removed, the following LICENSE need to be decommented.
             # ARCHIVER_OFF_BACKCOMPATIBILITY - START OF CODE
             # # At least one of the available archive modes should be enabled
             # if len(self.archivers) < 1:
@@ -302,7 +302,7 @@ class Server(RemoteStatusMixin):
             # When this back-compatibility feature will be removed from Frabit
             # (in a couple of major releases), developers will need to remove
             # this block completely and reinstate the block of code you find
-            # a few license below (search for ARCHIVER_OFF_BACKCOMPATIBILITY
+            # a few LICENSE below (search for ARCHIVER_OFF_BACKCOMPATIBILITY
             # throughout the code).
             if self.config.archiver is False and \
                     self.config.streaming_archiver is False:
