@@ -4,7 +4,7 @@
 只需要根据备份场景，在策略配置文件中配置策略；添加需要备份的实例，即可自动完成备份、恢复、巡检、归档等需要DBA手动完成的任务。Frabit主要是调用第三方的工具来自动完成备份、巡检、恢复等任务。将策略与备份逻辑解耦，全程不需要额外编写脚本。目前计划实现的功能如下：
  -  执行备份操作
      
-     1 . 逻辑备份:根据备份策略，调用[mysqldump](https://dev.mysql.com/doc/refman/5.7/en/mysqldump.html)进行备份     
+     1 . 逻辑备份:根据备份策略，调用[mysqldump/mysqlpump](https://dev.mysql.com/doc/refman/5.7/en/mysqldump.html)进行备份     
      
      2 . 物理备份:根据备份策略，调用[XtraBackup](https://www.percona.com/doc/percona-xtrabackup/LATEST/index.html)进行备份
      
