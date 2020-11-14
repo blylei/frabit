@@ -29,14 +29,14 @@ from frabit.exceptions import (ArchiverFailure, BadXlogSegmentName,
                                CommandFailedException, ConninfoException,
                                LockFileBusy, LockFileException,
                                LockFilePermissionDenied,
-                               PostgresDuplicateReplicationSlot,
-                               PostgresException,
-                               PostgresInvalidReplicationSlot,
-                               PostgresIsInRecovery,
-                               PostgresReplicationSlotInUse,
-                               PostgresReplicationSlotsFull,
-                               PostgresSuperuserRequired,
-                               PostgresUnsupportedFeature, SyncError,
+                               MysqlDuplicateReplicationSlot,
+                               MysqlException,
+                               MysqlInvalidReplicationSlot,
+                               MysqlIsInRecovery,
+                               MysqlReplicationSlotInUse,
+                               MysqlReplicationSlotsFull,
+                               MysqlSuperuserRequired,
+                               MysqlUnsupportedFeature, SyncError,
                                SyncNothingToDo, SyncToBeDeleted, TimeoutError,
                                UnknownBackupIdException)
 from frabit.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
@@ -44,7 +44,7 @@ from frabit.lockfile import (ServerBackupIdLock, ServerBackupLock,
                              ServerBackupSyncLock, ServerCronLock,
                              ServerWalArchiveLock, ServerWalReceiveLock,
                              ServerWalSyncLock, ServerXLOGDBLock)
-from frabit.mysql import PostgreSQLConnection, StreamingConnection
+from frabit.mysql import MySQLConnection, StreamingConnection
 from frabit.process import ProcessManager
 from frabit.remote_status import RemoteStatusMixin
 from frabit.retention_policies import RetentionPolicyFactory
@@ -103,7 +103,7 @@ class CheckStrategy(object):
         :param str check_name: the name of the check that is starting
         """
         self.running_check = check_name
-        _logger.debug("Starting check: '%s'" % check_name)
+        _logger.debug("Starting check: '{}'".format(check_name))
 
     def _check_name(self, check):
         if not check:
@@ -129,17 +129,14 @@ class CheckStrategy(object):
             if check not in self.ignore_list:
                 self.has_error = True
                 _logger.error(
-                    "Check '%s' failed for server '%s'" %
-                    (check, server_name))
+                    "Check '{check}' failed for server '{server}'".format(check=check, server=server_name))
             else:
                 # otherwise simply log the error (as info)
                 _logger.info(
-                    "Ignoring failed check '%s' for server '%s'" %
-                    (check, server_name))
+                    "Ignoring failed check '{check}' for server '{server}'".format(check=check, server=server_name))
         else:
             _logger.debug(
-                "Check '%s' succeeded for server '%s'" %
-                (check, server_name))
+                "Check '{check}' succeeded for server '{server}'".format(check=check, server=server_name))
 
         # Store the result and does not output anything
         result = self.CheckResult(server_name, check, status)
@@ -201,7 +198,7 @@ class Server(RemoteStatusMixin):
         self.process_manager = ProcessManager(self.config)
 
         # If 'primary_ssh_command' is specified, the source of the backup
-        # for this server is a Frabit installation (not a Postgres server)
+        # for this server is a Frabit installation (not a Mysql server)
         self.passive_node = config.primary_ssh_command is not None
 
         self.enforce_retention_policies = False
@@ -209,24 +206,20 @@ class Server(RemoteStatusMixin):
         self.streaming = None
         self.archivers = []
 
-        # Postgres configuration is available only if node is not passive
+        # Mysql configuration is available only if node is not passive
         if not self.passive_node:
-            # Initialize the main PostgreSQL connection
+            # Initialize the main MySQL connection
             try:
                 # Check that 'conninfo' option is properly set
                 if config.conninfo is None:
                     raise ConninfoException(
-                        "Missing 'conninfo' parameter for server '%s'" %
-                        config.name)
-                self.postgres = PostgreSQLConnection(
-                    config.conninfo,
-                    config.immediate_checkpoint,
-                    config.slot_name)
-            # If the PostgreSQLConnection creation fails, disable the Server
+                        "Missing 'conninfo' parameter for server '{}'".format(config.name))
+                self.mysql = MySQLConnection(config.conninfo)
+            # If the MySQLConnection creation fails, disable the Server
             except ConninfoException as e:
                 self.config.disabled = True
                 self.config.msg_list.append(
-                    "PostgreSQL connection: " + force_str(e).strip())
+                    "MySQL connection: " + force_str(e).strip())
 
             # Initialize the streaming PostgreSQL connection only when
             # backup_method is postgres or the streaming_archiver is in use
@@ -507,7 +500,7 @@ class Server(RemoteStatusMixin):
             with timeout(self.config.check_timeout):
                 # Check WAL archive
                 self.check_archive(check_strategy)
-                # Postgres configuration is not available on passive nodes
+                # Mysql configuration is not available on passive nodes
                 if not self.passive_node:
                     self.check_postgres(check_strategy)
                 # Check frabit directories from frabit configuration
@@ -995,7 +988,7 @@ class Server(RemoteStatusMixin):
                       "disabled",
                       "Disabled", self.config.disabled)
 
-        # Postgres status is available only if node is not passive
+        # Mysql status is available only if node is not passive
         if not self.passive_node:
             self.status_postgres()
             self.status_wal_archiver()
@@ -1080,7 +1073,7 @@ class Server(RemoteStatusMixin):
             # so there is no need to check the backup status.
             # Simply proceed with the normal delete process.
             server_backup_lock = ServerBackupLock(
-                self.config.flyrabbit_lock_directory,
+                self.config.frabit_lock_directory,
                 self.config.name)
             server_backup_lock.acquire(server_backup_lock.raise_if_fail,
                                        server_backup_lock.wait)
@@ -1111,7 +1104,7 @@ class Server(RemoteStatusMixin):
         try:
             # Take care of the backup lock.
             # Only one process can modify a backup at a time
-            lock = ServerBackupIdLock(self.config.flyrabbit_lock_directory,
+            lock = ServerBackupIdLock(self.config.frabit_lock_directory,
                                       self.config.name,
                                       backup.backup_id)
             with lock:
@@ -1180,7 +1173,7 @@ class Server(RemoteStatusMixin):
 
         try:
             # lock acquisition and backup execution
-            with ServerBackupLock(self.config.flyrabbit_lock_directory,
+            with ServerBackupLock(self.config.frabit_lock_directory,
                                   self.config.name):
                 backup_info = self.backup_manager.backup(
                     wait=wait, wait_timeout=wait_timeout)
@@ -1909,7 +1902,7 @@ class Server(RemoteStatusMixin):
         try:
             # Actually this is the highest level of locking in the cron,
             # this stops the execution of multiple cron on the same server
-            with ServerCronLock(self.config.flyrabbit_lock_directory,
+            with ServerCronLock(self.config.frabit_lock_directory,
                                 self.config.name):
                 # When passive call sync.cron() and never run
                 # local WAL archival
@@ -1959,7 +1952,7 @@ class Server(RemoteStatusMixin):
             # in one of the two commands failing on lock acquisition,
             # with no other consequence.
             with ServerWalArchiveLock(
-                    self.config.flyrabbit_lock_directory,
+                    self.config.frabit_lock_directory,
                     self.config.name):
                 # Output and release the lock immediately
                 output.info("Starting WAL archiving for server %s",
@@ -2000,7 +1993,7 @@ class Server(RemoteStatusMixin):
             # in one of the two commands failing on lock acquisition,
             # with no other consequence.
             with ServerWalReceiveLock(
-                    self.config.flyrabbit_lock_directory,
+                    self.config.frabit_lock_directory,
                     self.config.name):
                 # Output and release the lock immediately
                 output.info("Starting streaming archiver "
@@ -2045,7 +2038,7 @@ class Server(RemoteStatusMixin):
             # in one of the two commands failing on lock acquisition,
             # with no other consequence.
             with ServerBackupIdLock(
-                    self.config.flyrabbit_lock_directory,
+                    self.config.frabit_lock_directory,
                     self.config.name,
                     backup_id):
                 # Output and release the lock immediately
@@ -2079,7 +2072,7 @@ class Server(RemoteStatusMixin):
         try:
             # Take care of the archive lock.
             # Only one archive job per server is admitted
-            with ServerWalArchiveLock(self.config.flyrabbit_lock_directory,
+            with ServerWalArchiveLock(self.config.frabit_lock_directory,
                                       self.config.name):
                 self.backup_manager.archive_wal(verbose)
         except LockFileBusy:
@@ -2106,7 +2099,7 @@ class Server(RemoteStatusMixin):
                              "(9.4 or higher is required)" %
                              self.streaming.server_major_version)
                 return
-        except PostgresException as exc:
+        except MysqlException as exc:
             msg = "Cannot connect to server '%s'" % self.config.name
             output.error(msg, log=False)
             _logger.error("%s: %s", msg, force_str(exc).strip())
@@ -2125,15 +2118,15 @@ class Server(RemoteStatusMixin):
         try:
             self.streaming.create_physical_repslot(self.config.slot_name)
             output.info("Replication slot '%s' created", self.config.slot_name)
-        except PostgresDuplicateReplicationSlot:
+        except MysqlDuplicateReplicationSlot:
             output.error("Replication slot '%s' already exists",
                          self.config.slot_name)
-        except PostgresReplicationSlotsFull:
+        except MysqlReplicationSlotsFull:
             output.error("All replication slots for server '%s' are in use\n"
                          "Free one or increase the max_replication_slots "
                          "value on your PostgreSQL server.",
                          self.config.name)
-        except PostgresException as exc:
+        except MysqlException as exc:
             output.error(
                 "Cannot create replication slot '%s' on server '%s': %s",
                 self.config.slot_name,
@@ -2157,7 +2150,7 @@ class Server(RemoteStatusMixin):
                              "required)" %
                              self.streaming.server_major_version)
                 return
-        except PostgresException as exc:
+        except MysqlException as exc:
             msg = "Cannot connect to server '%s'" % self.config.name
             output.error(msg, log=False)
             _logger.error("%s: %s", msg, force_str(exc).strip())
@@ -2176,16 +2169,16 @@ class Server(RemoteStatusMixin):
         try:
             self.streaming.drop_repslot(self.config.slot_name)
             output.info("Replication slot '%s' dropped", self.config.slot_name)
-        except PostgresInvalidReplicationSlot:
+        except MysqlInvalidReplicationSlot:
             output.error("Replication slot '%s' does not exist",
                          self.config.slot_name)
-        except PostgresReplicationSlotInUse:
+        except MysqlReplicationSlotInUse:
             output.error(
                 "Cannot drop replication slot '%s' on server '%s' "
                 "because it is in use.",
                 self.config.slot_name,
                 self.config.name)
-        except PostgresException as exc:
+        except MysqlException as exc:
             output.error(
                 "Cannot drop replication slot '%s' on server '%s': %s",
                 self.config.slot_name,
@@ -2216,7 +2209,7 @@ class Server(RemoteStatusMixin):
         try:
             # Take care of the receive-wal lock.
             # Only one receiving process per server is permitted
-            with ServerWalReceiveLock(self.config.flyrabbit_lock_directory,
+            with ServerWalReceiveLock(self.config.frabit_lock_directory,
                                       self.config.name):
                 try:
                     # Only the StreamingWalArchiver implementation
@@ -2280,7 +2273,7 @@ class Server(RemoteStatusMixin):
             os.makedirs(self.config.wals_directory)
         xlogdb = self.xlogdb_file_name
 
-        with ServerXLOGDBLock(self.config.flyrabbit_lock_directory,
+        with ServerXLOGDBLock(self.config.frabit_lock_directory,
                               self.config.name):
             # If the file doesn't exist and it is required to read it,
             # we open it in a+ mode, to be sure it will be created
@@ -2457,10 +2450,10 @@ class Server(RemoteStatusMixin):
                 # Is not necessary to perform a switch_wal
                 output.info("No switch required for server '%s'" %
                             self.config.name)
-        except PostgresIsInRecovery:
+        except MysqlIsInRecovery:
             output.info("No switch performed because server '%s' "
                         "is a standby." % self.config.name)
-        except PostgresSuperuserRequired:
+        except MysqlSuperuserRequired:
             # Superuser rights are required to perform the switch_wal
             output.error("Frabit switch-wal requires superuser rights")
             return
@@ -2533,11 +2526,11 @@ class Server(RemoteStatusMixin):
         Implements the 'replication-status' command.
         """
         if target == 'hot-standby':
-            client_type = PostgreSQLConnection.STANDBY
+            client_type = MySQLConnection.STANDBY
         elif target == 'wal-streamer':
-            client_type = PostgreSQLConnection.WALSTREAMER
+            client_type = MySQLConnection.WALSTREAMER
         else:
-            client_type = PostgreSQLConnection.ANY_STREAMING_CLIENT
+            client_type = MySQLConnection.ANY_STREAMING_CLIENT
         try:
             standby_info = self.postgres.get_replication_stats(client_type)
             if standby_info is None:
@@ -2547,9 +2540,9 @@ class Server(RemoteStatusMixin):
                 output.result('replication_status', self.config.name,
                               target, self.postgres.current_xlog_location,
                               standby_info)
-        except PostgresUnsupportedFeature as e:
-            output.info("  Requires PostgreSQL %s or higher", e)
-        except PostgresSuperuserRequired:
+        except MysqlUnsupportedFeature as e:
+            output.info("  Requires MySQL %s or higher", e)
+        except MysqlSuperuserRequired:
             output.info("  Requires superuser rights")
 
     def get_children_timelines(self, tli, forked_after=None):
@@ -2623,7 +2616,7 @@ class Server(RemoteStatusMixin):
 
             # Take care of the backup lock.
             # Only one process can modify a backup a a time
-            with ServerBackupIdLock(self.config.flyrabbit_lock_directory,
+            with ServerBackupIdLock(self.config.frabit_lock_directory,
                                     self.config.name,
                                     backup_info.backup_id):
                 orig_status = backup_info.status
@@ -2815,7 +2808,7 @@ class Server(RemoteStatusMixin):
             # If cannot acquire the lock, another synchronisation process
             # is running, so we give up.
             try:
-                with ServerBackupSyncLock(self.config.flyrabbit_lock_directory,
+                with ServerBackupSyncLock(self.config.frabit_lock_directory,
                                           self.config.name, backup_id):
                     output.info("Starting copy of backup %s for server %s",
                                 backup_id, self.config.name)
@@ -2845,7 +2838,7 @@ class Server(RemoteStatusMixin):
             # If cannot acquire the lock, another synchronisation process
             # is running, so we give up.
             try:
-                with ServerWalSyncLock(self.config.flyrabbit_lock_directory,
+                with ServerWalSyncLock(self.config.frabit_lock_directory,
                                        self.config.name,):
                     output.info("Started copy of WAL files for server %s",
                                 self.config.name)
@@ -3131,7 +3124,7 @@ class Server(RemoteStatusMixin):
         # Try to acquire the backup lock, if the lock is not available abort
         # the copy.
         try:
-            with ServerBackupSyncLock(self.config.flyrabbit_lock_directory,
+            with ServerBackupSyncLock(self.config.frabit_lock_directory,
                                       self.config.name, backup_name):
                 try:
                     backup_manager = self.backup_manager
@@ -3265,7 +3258,7 @@ class Server(RemoteStatusMixin):
         # Try to acquire the sync-wal lock if the lock is not available,
         # abort the sync-wal operation
         try:
-            with ServerWalSyncLock(self.config.flyrabbit_lock_directory,
+            with ServerWalSyncLock(self.config.frabit_lock_directory,
                                    self.config.name, ):
                 try:
                     # Need to load data from status files: primary.info
