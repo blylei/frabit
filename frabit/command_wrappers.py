@@ -800,6 +800,9 @@ class XtraBackup(MySQLClient):
 
         # Set the backup destination
         self.args += ['-v', '--no-password', '--targetdir={}'.format(targetdir)]
+        # Manage additional args
+        if args:
+            self.args += args
 
 
 class Mysqlbinlog(MySQLClient):
