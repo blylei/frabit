@@ -641,46 +641,6 @@ class Rsync(Command):
         return self.ret
 
 
-class XtraBackup(Command):
-    """
-    Wrapper class for the xtrabackup system command
-    """
-
-    COMMAND_ALTERNATIVES = ['xtrabackup']
-
-    def __init__(self,
-                 connection,
-                 targetdir,
-                 command,
-                 version=None,
-                 app_name=None,
-                 bwlimit=None,
-                 tbs_mapping=None,
-                 check=True,
-                 args=None,
-                 **kwargs):
-        """
-        Constructor
-
-        :param MySQL connection: an object representing
-          a database connection
-        :param str targetdir: destination directory path
-        :param str command: the command to use
-        :param Version version: the command version
-        :param str app_name: the application name to use for the connection
-        :param str bwlimit: bandwidth limit for pg_basebackup
-        :param Dict[str, str] tbs_mapping: used for tablespace
-        :param bool check: check if the return value is in the list of
-          allowed values of the Command obj
-        :param List[str] args: additional arguments
-        """
-        MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
-                             check=check, **kwargs)
-
-        # Set the backup destination
-        self.args += ['-v', '--no-password', '--targetdir={}'.format(targetdir)]
-
-
 class MySQLClient(Command):
     """
     Superclass of all the MySQL client commands.
@@ -814,6 +774,42 @@ class MySQLClient(Command):
         return version_info
 
 
+class XtraBackup(MySQLClient):
+    """
+    Wrapper class for the xtrabackup system command
+    """
+
+    COMMAND_ALTERNATIVES = ['xtrabackup']
+
+    def __init__(self,
+                 connection,
+                 targetdir,
+                 command,
+                 version=None,
+                 app_name=None,
+                 check=True,
+                 args=None,
+                 **kwargs):
+        """
+        Constructor
+
+        :param MySQL connection: an object representing a database connection
+        :param str targetdir: destination directory path
+        :param str command: the command to use
+        :param Version version: the command version
+        :param str app_name: the application name to use for the connection
+        :param str bwlimit: bandwidth limit for pg_basebackup
+        :param Dict[str, str] tbs_mapping: used for tablespace
+        :param bool check: check if the return value is in the list of allowed values of the Command obj
+        :param List[str] args: additional arguments
+        """
+        MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
+                             check=check, **kwargs)
+
+        # Set the backup destination
+        self.args += ['-v', '--no-password', '--targetdir={}'.format(targetdir)]
+
+
 class Mysqlbinlog(MySQLClient):
     """
     Wrapper class for mysqlbinlog
@@ -827,7 +823,6 @@ class Mysqlbinlog(MySQLClient):
                  command,
                  version=None,
                  app_name=None,
-                 synchronous=False,
                  check=True,
                  args=None,
                  **kwargs):
@@ -911,8 +906,7 @@ class Mysqlpump(MySQLClient):
         """
         Constructor
 
-        :param MySQL connection: an object representing
-          a database connection
+        :param MySQL connection: an object representing a database connection
         :param str destination: destination directory path
         :param str command: the command to use
         :param Version version: the command version
@@ -936,8 +930,7 @@ class FrabitSubProcess:
 
     def __init__(self, command=sys.argv[0], subcommand=None, config=None, args=None, keep_descriptors=False):
         """
-        Build a specific wrapper for all the frabit sub-commands,
-        providing an unified interface.
+        Build a specific wrapper for all the frabit sub-commands, providing an unified interface.
 
         :param str command: path to frabit
         :param str subcommand: the frabit sub-command
