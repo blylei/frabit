@@ -836,7 +836,7 @@ class Mysqlbinlog(MySQLClient):
         MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
                              check=check, **kwargs)
 
-        self.args += ["--verbose", "--no-loop", "--no-password", "--directory={}".format(destination)]
+        self.args += ["--raw", "--no-loop", "--no-password", "--directory={}".format(destination)]
 
         # Manage additional args
         if args:
