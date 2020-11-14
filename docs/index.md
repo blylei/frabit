@@ -40,3 +40,4 @@ Frabit 将备份策略，备份任务、备份实例以及巡检记录存储到M
 mysql -u root -p < frabit.sql
 ```
  
+(操作手册)[./操作手册]
