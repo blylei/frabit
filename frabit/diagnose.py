@@ -37,7 +37,7 @@ def exec_diagnose(servers, errors_list):
     diagnosis['global']['config'] = dict(frabit.__config__._global_config)
     diagnosis['global']['config']['errors_list'] = errors_list
     try:
-        command = fs.UnixLocalCommand()
+        command = filesystem.UnixLocalCommand()
         # basic system info
         diagnosis['global']['system_info'] = command.get_system_info()
     except CommandFailedException as e:
@@ -48,7 +48,7 @@ def exec_diagnose(servers, errors_list):
     for name in sorted(servers):
         server = servers[name]
         if server is None:
-            output.error("Unknown server '%s'" % name)
+            output.error("Unknown server '{}'".format(name))
             continue
         # server configuration
         diagnosis['servers'][name] = {}
@@ -57,12 +57,8 @@ def exec_diagnose(servers, errors_list):
         # server system info
         if server.config.ssh_command:
             try:
-                command = fs.UnixRemoteCommand(
-                    ssh_command=server.config.ssh_command,
-                    path=server.path
-                )
-                diagnosis['servers'][name]['system_info'] = (
-                    command.get_system_info())
+                command = filesystem.UnixRemoteCommand( ssh_command=server.config.ssh_command, path=server.path)
+                diagnosis['servers'][name]['system_info'] = (command.get_system_info())
             except FsOperationFailed:
                 pass
         # frabit status information for the server
@@ -77,5 +73,5 @@ def exec_diagnose(servers, errors_list):
         }
         # Release any PostgreSQL resource
         server.close()
-    output.info(json.dumps(diagnosis, cls=BarmanEncoder, indent=4,
+    output.info(json.dumps(diagnosis, cls=FrabitEncoder, indent=4,
                            sort_keys=True))
