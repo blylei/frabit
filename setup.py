@@ -1,39 +1,21 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-# barman - Backup and Recovery Manager for PostgreSQL
+# (c) 2020 Frabit Project maintained and limited by Blylei < blylei918@gmail.com >
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
-# Copyright (C) 2011-2020 2ndQuadrant Limited <info@2ndquadrant.com>
+# This file is part of Frabit
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 """Backup and Recovery Manager for MySQL
 
-Barman (Backup and Recovery Manager) is an open-source administration
-tool for disaster recovery of PostgreSQL servers written in Python.
-It allows your organisation to perform remote backups of multiple
-servers in business critical environments to reduce risk and help DBAs
-during the recovery phase.
-
-Barman is distributed under GNU GPL 3 and maintained by 2ndQuadrant.
+Frabit (Fly rabbit) is an open-source administration tool for disaster recovery of MySQL servers written in Python.
+It allows your organisation to perform remote backups of multiple servers in business critical environments to reduce
+risk and help our DBAs during the recovery phase.
 """
 
 import sys
 
 from setuptools import find_packages, setup
 
-if sys.version_info < (2, 6):
-    raise SystemExit('ERROR: Barman needs at least python 2.6 to work')
+if sys.version_info < (3, 6):
+    raise SystemExit('ERROR: Frabit needs at least python 3.6 to work')
 
 # Depend on pytest_runner only when the tests are actually invoked
 needs_pytest = set(['pytest', 'test']).intersection(sys.argv)
@@ -42,7 +24,7 @@ pytest_runner = ['pytest_runner'] if needs_pytest else []
 setup_requires = pytest_runner
 
 install_requires = [
-    'psycopg2 >= 2.4.2',
+    'mysql-connector-python >= 8.0.22',
     'argh >= 0.21.2',
     'python-dateutil',
 ]
@@ -58,38 +40,19 @@ if sys.version_info < (2, 7):
             'wheel<0.30.0',  # wheel has dropped 2.6 support in 0.30.0
         ]
 
-barman = {}
-with open('barman/version.py', 'r') as fversion:
-    exec(fversion.read(), barman)
+frabit = {}
+with open('frabit/version.py', 'r') as fversion:
+    exec(fversion.read(), frabit)
 
 setup(
     name='barman',
-    version=barman['__version__'],
-    author='2ndQuadrant Limited',
-    author_email='info@2ndquadrant.com',
-    url='http://www.pgbarman.org/',
+    version=frabit['__version__'],
+    author='blylei Limited',
+    author_email='blylei918@gmail.com',
     packages=find_packages(exclude=["tests"]),
-    data_files=[
-        ('share/man/man1', ['doc/barman.1',
-                            'doc/barman-cloud-backup.1',
-                            'doc/barman-cloud-backup-list.1',
-                            'doc/barman-cloud-restore.1',
-                            'doc/barman-cloud-wal-archive.1',
-                            'doc/barman-cloud-wal-restore.1',
-                            'doc/barman-wal-archive.1',
-                            'doc/barman-wal-restore.1']),
-        ('share/man/man5', ['doc/barman.5']),
-    ],
     entry_points={
         'console_scripts': [
-            'barman=barman.cli:main',
-            'barman-cloud-backup=barman.clients.cloud_backup:main',
-            'barman-cloud-wal-archive=barman.clients.cloud_walarchive:main',
-            'barman-cloud-restore=barman.clients.cloud_restore:main',
-            'barman-cloud-wal-restore=barman.clients.cloud_walrestore:main',
-            'barman-cloud-backup-list=barman.clients.cloud_backup_list:main',
-            'barman-wal-archive=barman.clients.walarchive:main',
-            'barman-wal-restore=barman.clients.walrestore:main',
+            'frabit=frabit.cli:main',
         ],
     },
     license='GPL-3.0',
@@ -97,10 +60,9 @@ setup(
     long_description="\n".join(__doc__.split("\n")[2:]),
     install_requires=install_requires,
     extras_require={
-        'cloud': ['boto3'],
         'completion': ['argcomplete'],
     },
-    platforms=['Linux', 'Mac OS X'],
+    platforms=['Linux'],
     classifiers=[
         'Environment :: Console',
         'Development Status :: 5 - Production/Stable',
@@ -111,10 +73,6 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 or later '
         '(GPLv3+)',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
