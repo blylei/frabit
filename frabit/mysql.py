@@ -242,10 +242,7 @@ class MySQLConnection(MySQL):
            when start a backup
         :param str|None slot_name: Replication slot name
         """
-        super(PostgreSQLConnection, self).__init__(conninfo)
-        self.immediate_checkpoint = immediate_checkpoint
-        self.slot_name = slot_name
-        self.application_name = application_name
+        super(MySQLConnection, self).__init__(conninfo)
         self.configuration_files = None
 
     def connect(self):
@@ -255,7 +252,7 @@ class MySQLConnection(MySQL):
         if self._check_connection():
             return self._conn
 
-        self._conn = super(PostgreSQLConnection, self).connect()
+        self._conn = super(MySQLConnection, self).connect()
         server_version = self._conn.server_version
         use_app_name = 'application_name' in self.conn_parameters
         if server_version >= 90000 and not use_app_name:
