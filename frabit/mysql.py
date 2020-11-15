@@ -4,7 +4,7 @@
 # This file is part of Frabit
 #
 """
-基于mysql_connector封装对MySQL的操作接口
+基于mysql_connector封装对MySQL的操作接口,Frabit对MySQL的操作均通过此模块实现
 """
 import os
 import sys
@@ -15,6 +15,7 @@ import logging
 
 import mysql
 from mysql import connector
+from mysql.connector import errorcode
 from abc import abstractmethod, abstractclassmethod, ABCMeta
 
 import frabit
@@ -55,8 +56,7 @@ def _atexit():
     # Take a copy of the list because the conn.close() method modify it
     for conn in list(_live_connections):
         _logger.warning(
-            "Forcing %s cleanup during process shut down.",
-            conn.__class__.__name__)
+            "Forcing {} cleanup during process shut down.".format(conn.__class__.__name__))
         conn.close()
 
 
@@ -65,11 +65,11 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
     This abstract class represents a generic interface to a MySQL server.
     """
 
-    CHECK_QUERY = 'SELECT 1'
+    CHECK_QUERY = 'SELECT 1;'
 
     def __init__(self, conninfo):
         """
-        Abstract base class constructor for PostgreSQL interface.
+        Abstract base class constructor for MySQL interface.
 
         :param str conninfo: Connection information (aka DSN)
         """
@@ -77,8 +77,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         self.conninfo = conninfo
         self._conn = None
         self.allow_reconnect = True
-        # Build a dictionary with connection info parameters
-        # This is mainly used to speed up search in conninfo
+        # Build a dictionary with connection info parameters,This is mainly used to speed up search in conninfo
         try:
             self.conn_parameters = self.parse_dsn(conninfo)
         except (ValueError, TypeError) as e:
@@ -105,9 +104,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         :param dict[str,str] parameters: Connection parameters
         :rtype: str
         """
-        # TODO: this might be made more robust in the future
-        return ' '.join(
-            ["%s=%s" % (k, v) for k, v in sorted(parameters.items())])
+        return ' '.join(["%s=%s" % (k, v) for k, v in sorted(parameters.items())])
 
     def get_connection_string(self):
         """
@@ -117,10 +114,6 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         :return str: the connection string
         """
         conn_string = self.conninfo
-        # check if the application name is already defined by user
-        if 'options' not in self.conn_parameters:
-            conn_string += ' options=-csearch_path='
-
         return conn_string
 
     def connect(self):
@@ -134,7 +127,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
             # If psycopg2 fails to connect to the host,
             # raise the appropriate exception
             except connector.DatabaseError as e:
-                raise MysqlConnectionError(force_str(e).strip())
+                raise MysqlConnectError(force_str(e).strip())
             # Register the connection to the list of live connections
             _live_connections.append(self)
         return self._conn
@@ -160,23 +153,21 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
             # has started a new transaction.
             if initial_status == STATUS_READY:
                 self._conn.rollback()
-        except psycopg2.DatabaseError:
+        except connector.DatabaseError:
             # Connection is broken, so we need to reconnect
             self.close()
             # Raise an error if reconnect is not allowed
             if not self.allow_reconnect:
-                raise PostgresConnectionError(
-                    "Connection lost, reconnection not allowed")
+                raise MysqlConnectError("Connection lost, reconnection not allowed")
             return False
         finally:
             if cursor:
                 cursor.close()
-
         return True
 
     def close(self):
         """
-        Close the connection to PostgreSQL
+        Close the connection to MySQL
         """
         if self._conn:
             # If the connection is still alive, rollback and close it
@@ -198,7 +189,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
     @property
     def server_version(self):
         """
-        Version of PostgreSQL (returned by psycopg2)
+        Version of MySQL (returned by mysql-connector-python)
         """
         conn = self.connect()
         return conn.server_version
@@ -206,7 +197,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
     @property
     def server_txt_version(self):
         """
-        Human readable version of PostgreSQL (calculated from server_version)
+        Human readable version of MySQL (calculated from server_version)
 
         :rtype: str|None
         """
@@ -215,22 +206,15 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
             major = int(conn.server_version / 10000)
             minor = int(conn.server_version / 100 % 100)
             patch = int(conn.server_version % 100)
-            if major < 10:
-                return "%d.%d.%d" % (major, minor, patch)
-            if minor != 0:
-                _logger.warning(
-                    "Unexpected non zero minor version %s in %s",
-                    minor, conn.server_version)
-            return "%d.%d" % (major, patch)
-        except PostgresConnectionError as e:
-            _logger.debug("Error retrieving PostgreSQL version: %s",
-                          force_str(e).strip())
+            return "{major}.{minor}.{patch}".format(major=major, minor=minor, patch=patch)
+        except MysqlConnectError as e:
+            _logger.debug("Error retrieving MySQL version: {}".format(force_str(e).strip()))
             return None
 
     @property
     def server_major_version(self):
         """
-        PostgreSQL major version (calculated from server_txt_version)
+        MySQL major version (calculated from server_txt_version)
 
         :rtype: str|None
         """
