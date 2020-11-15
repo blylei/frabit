@@ -43,7 +43,6 @@ _TIME_INTERVAL_RE = re.compile(r"""
       \s*$
       """, re.IGNORECASE | re.VERBOSE)
 
-REUSE_BACKUP_VALUES = ('copy', 'link', 'off')
 
 # Possible copy methods for backups (must be all lowercase)
 BACKUP_METHOD_VALUES = ['rsync', 'mysql']
@@ -192,23 +191,6 @@ def parse_time_interval(value):
         raise ValueError("Invalid unit time {}".format(unit))
 
     return time_delta
-
-
-def parse_reuse_backup(value):
-    """
-    Parse a string to a valid reuse_backup value.
-
-    Valid values are "copy", "link" and "off"
-
-    :param str value: reuse_backup value
-    :raises ValueError: if the value is invalid
-    """
-    if value is None:
-        return None
-    if value.lower() in REUSE_BACKUP_VALUES:
-        return value.lower()
-    raise ValueError("Invalid value (use '{}' or '{}')".format("', '".join(REUSE_BACKUP_VALUES[:-1]),
-                                                                REUSE_BACKUP_VALUES[-1]))
 
 
 def parse_backup_method(value):
@@ -404,7 +386,6 @@ class ServerConfig(object):
         'network_compression': parse_boolean,
         'parallel_jobs': int,
         'recovery_options': RecoveryOptions,
-        'reuse_backup': parse_reuse_backup,
         'streaming_archiver': parse_boolean,
         'streaming_archiver_batch_size': int
     }
@@ -438,15 +419,13 @@ class ServerConfig(object):
                 # we need a different invocation, which passes not only
                 # the value to the parser, but also the key name
                 # and the section that contains the configuration
-                if inspect.isclass(parser) \
-                        and issubclass(parser, CsvOption):
+                if inspect.isclass(parser) and issubclass(parser, CsvOption):
                     value = parser(new_value, key, source)
                 else:
                     value = parser(new_value)
             except Exception as e:
-                output.warning("Ignoring invalid configuration value '%s' "
-                               "for key %s in %s: %s",
-                               new_value, key, source, e)
+                output.warning("Ignoring invalid configuration value '{new_value}' for key {key} "
+                               "in {source}: {e}".format(new_value=new_value, key=key, source=source, e=e))
         else:
             value = new_value
         return value
@@ -498,26 +477,6 @@ class ServerConfig(object):
         del json_dict['config']
         return json_dict
 
-    def get_bwlimit(self, tablespace=None):
-        """
-        Return the configured bandwidth limit for the provided tablespace
-
-        If tablespace is None, it returns the global bandwidth limit
-
-        :param frabit.infofile.Tablespace tablespace: the tablespace to copy
-        :rtype: str
-        """
-        # Default to global bandwidth limit
-        bwlimit = self.bandwidth_limit
-
-        if tablespace:
-            # A tablespace can be copied using a per-tablespace bwlimit
-            tbl_bw_limit = self.tablespace_bandwidth_limit
-            if (tbl_bw_limit and tablespace.name in tbl_bw_limit):
-                bwlimit = tbl_bw_limit[tablespace.name]
-
-        return bwlimit
-
 
 class Config(object):
     """This class represents the frabit configuration.
@@ -531,6 +490,7 @@ class Config(object):
     def __init__(self, filename=None):
         #  In Python 3 ConfigParser has changed to be strict by default.
         self._config = ConfigParser(strict=False)
+        # 如果提供自定义配置文件，优先使用
         if filename:
             if hasattr(filename, 'read'):
                 self._config.read_file(filename)
@@ -539,6 +499,7 @@ class Config(object):
                 if not os.path.exists(filename):
                     sys.exit("Configuration file '{}' does not exist".format(filename))
                 self._config.read(os.path.expanduser(filename))
+        # 没有指定配置文件的话，使用默认的配置文件（强烈建议使用默认配置文件）
         else:
             # Check for the presence of configuration files inside default directories
             for path in self.CONFIG_FILES:
@@ -555,7 +516,8 @@ class Config(object):
         self._parse_global_config()
 
     def get(self, section, option, defaults=None, none_value=None):
-        """Method to get the value from a given section from Frabit configuration
+        """
+        Method to get the value from a given section from Frabit configuration
         """
         if not self._config.has_section(section):
             return None
@@ -635,7 +597,7 @@ class Config(object):
                 continue
             # Exit if the section has a reserved name
             if section in FORBIDDEN_SERVER_NAMES:
-                msg = "the reserved word '{}' is not allowed as server name,Please rename it.".format(section)
+                msg = "The reserved word '{}' is not allowed as server name,Please rename it.".format(section)
                 _logger.fatal(msg)
                 raise SystemExit("FATAL: {}".format(msg))
             # Create a ServerConfig object
