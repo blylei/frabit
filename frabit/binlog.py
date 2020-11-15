@@ -12,7 +12,6 @@ import os
 import re
 from tempfile import NamedTemporaryFile
 
-from frabit.exceptions import BadHistoryFileContents, BadXlogSegmentName
 
 # xlog file segment name parser (regular expression)
 _xlog_re = re.compile(r'''
