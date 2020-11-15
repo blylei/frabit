@@ -22,10 +22,16 @@ from frabit import utils
 from frabit import exceptions
 from frabit import output
 
-from frabit.exceptions import (
-    ConninfoException, MysqlConnectError, MysqlException,
-    BackupFunctionsAccessRequired,
-)
+from frabit.exceptions import (ConninfoException,
+                               MysqlDataError,
+                               MysqlIntegrityError,
+                               MysqlInternalError,
+                               MysqlOperationalError,
+                               MysqlNotSupportedError,
+                               MysqlProgrammingError,
+                               MysqlConnectError,
+                               MysqlInterfaceError
+                               )
 from frabit.infofile import Tablespace
 from frabit.remote_status import RemoteStatusMixin
 from frabit.utils import force_str, simplify_version, with_metaclass
