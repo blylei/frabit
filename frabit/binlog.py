@@ -4,8 +4,7 @@
 # This file is part of Frabit
 #
 """
-This module contains functions to retrieve information about xlog
-files
+This module contains functions to retrieve information about binlog files
 """
 
 import collections
