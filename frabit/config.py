@@ -4,8 +4,7 @@
 # This file is part of Frabit
 #
 """
-This module is responsible for all the things related to
-Flyrabbit configuration, such as parsing configuration file.
+This module is responsible for all the things related to Frabit configuration, such as parsing configuration file.
 """
 
 import collections
