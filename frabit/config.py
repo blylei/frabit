@@ -209,7 +209,7 @@ def parse_backup_method(value):
     raise ValueError("Invalid value (must be one in: '{}')".format("', '".join(BACKUP_METHOD_VALUES)))
 
 
-class ServerConfig(object):
+class ServerConfig:
     """
     This class represents the configuration for a specific Server instance.
     """
@@ -233,7 +233,6 @@ class ServerConfig(object):
         'description',
         'disabled',
         'errors_directory',
-        'immediate_checkpoint',
         'incoming_wals_directory',
         'last_backup_maximum_age',
         'max_incoming_wals_queue',
@@ -263,11 +262,9 @@ class ServerConfig(object):
         'pre_wal_delete_retry_script',
         'primary_ssh_command',
         'recovery_options',
-        'create_slot',
         'retention_policy',
         'retention_policy_mode',
         'reuse_backup',
-        'slot_name',
         'ssh_command',
         'streaming_archiver',
         'streaming_archiver_batch_size',
@@ -280,7 +277,7 @@ class ServerConfig(object):
         'wals_directory'
     ]
 
-    BARMAN_KEYS = [
+    FRABIT_KEYS = [
         'archiver',
         'archiver_batch_size',
         'backup_method',
@@ -322,16 +319,12 @@ class ServerConfig(object):
         'pre_wal_delete_retry_script',
         'primary_ssh_command',
         'recovery_options',
-        'create_slot',
         'retention_policy',
         'retention_policy_mode',
-        'reuse_backup',
-        'slot_name',
         'streaming_archiver',
         'streaming_archiver_batch_size',
         'streaming_archiver_name',
         'streaming_backup_name',
-        'tablespace_bandwidth_limit',
         'wal_retention_policy'
     ]
 
@@ -354,7 +347,6 @@ class ServerConfig(object):
         'network_compression': 'false',
         'parallel_jobs': '1',
         'recovery_options': '',
-        'create_slot': 'manual',
         'retention_policy_mode': 'auto',
         'streaming_archiver': 'off',
         'streaming_archiver_batch_size': '0',
@@ -408,9 +400,8 @@ class ServerConfig(object):
         # If the new value is None, returns the old value
         if new_value is None:
             return value
-        # If we have a parser for the current key, use it to obtain the
-        # actual value. If an exception is thrown, print a warning and
-        # ignore the value.
+        # If we have a parser for the current key, use it to obtain the actual value. If an exception is thrown,
+        # print a warning and ignore the value.
         # noinspection PyBroadException
         if key in self.PARSERS:
             parser = self.PARSERS[key]
@@ -478,7 +469,7 @@ class ServerConfig(object):
         return json_dict
 
 
-class Config(object):
+class Config:
     """This class represents the frabit configuration.
 
     Default configuration files are /etc/frabit/frabit.conf
@@ -730,14 +721,12 @@ class Config(object):
         """
         Check every config parameter against a list of allowed keys
 
-        :param config_items: list of tuples containing provided parameters
-            along with their values
+        :param config_items: list of tuples containing provided parameters along with their values
         :param allowed_keys: list of allowed keys
         :param section: source section (for error reporting)
         """
         for parameter in config_items:
-            # if the parameter name is not in the list of allowed values,
-            # then output a warning
+            # if the parameter name is not in the list of allowed values, then output a warning
             name = parameter[0]
             if name not in allowed_keys:
                 output.warning('Invalid configuration option "{name}" in [{section}] section.'.format(name=name,
