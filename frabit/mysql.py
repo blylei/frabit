@@ -82,7 +82,7 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
             self.conn_parameters = self.parse_dsn(conninfo)
         except (ValueError, TypeError) as e:
             _logger.debug(e)
-            raise ConninfoException('Cannot connect to mysql: "%s" is not a valid connection string'.format(conninfo))
+            raise ConninfoException('Cannot connect to mysql: "{}" is not a valid connection string'.format(conninfo))
 
     @staticmethod
     def parse_dsn(dsn):
@@ -92,7 +92,6 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         :param str dsn: Connection information (aka DSN)
         :rtype: dict[str,str]
         """
-        # TODO: this might be made more robust in the future
         return dict(x.split('=', 1) for x in dsn.split())
 
     @staticmethod
@@ -124,9 +123,8 @@ class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         if not self._check_connection():
             try:
                 self._conn = mysql.connector.connect(self.conninfo)
-            # If psycopg2 fails to connect to the host,
-            # raise the appropriate exception
-            except connector.DatabaseError as e:
+            # If mysql-connector-python fails to connect to the host, raise the appropriate exception
+            except connector.PoolError as e:
                 raise MysqlConnectError(force_str(e).strip())
             # Register the connection to the list of live connections
             _live_connections.append(self)

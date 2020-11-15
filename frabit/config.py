@@ -32,10 +32,9 @@ _logger = logging.getLogger(__name__)
 
 FORBIDDEN_SERVER_NAMES = ['all']
 
-DEFAULT_USER = 'barman'
+DEFAULT_USER = 'frabit'
 DEFAULT_LOG_LEVEL = logging.INFO
-DEFAULT_LOG_FORMAT = "%(asctime)s [%(process)s] %(name)s " \
-                     "%(levelname)s: %(message)s"
+DEFAULT_LOG_FORMAT = "%(asctime)s [%(process)s] %(name)s %(levelname)s: %(message)s"
 
 _TRUE_RE = re.compile(r"""^(true|t|yes|1|on)$""", re.IGNORECASE)
 _FALSE_RE = re.compile(r"""^(false|f|no|0|off)$""", re.IGNORECASE)
@@ -44,14 +43,11 @@ _TIME_INTERVAL_RE = re.compile(r"""
       (\d+)\s+(day|month|week)s?  # N (day|month|week) with optional 's'
       \s*$
       """, re.IGNORECASE | re.VERBOSE)
-_SLOT_NAME_RE = re.compile("^[0-9a-z_]+$")
 
 REUSE_BACKUP_VALUES = ('copy', 'link', 'off')
 
 # Possible copy methods for backups (must be all lowercase)
-BACKUP_METHOD_VALUES = ['rsync', 'postgres']
-
-CREATE_SLOT_VALUES = ['manual', 'auto']
+BACKUP_METHOD_VALUES = ['rsync', 'mysql']
 
 
 class CsvOption(set):
@@ -138,9 +134,7 @@ class BackupOptions(CsvOption):
     # list holding all the allowed values for the BackupOption class
     value_list = [EXCLUSIVE_BACKUP, CONCURRENT_BACKUP, EXTERNAL_CONFIGURATION]
     # map holding all the possible conflicts between the allowed values
-    conflicts = {
-        EXCLUSIVE_BACKUP: CONCURRENT_BACKUP,
-        CONCURRENT_BACKUP: EXCLUSIVE_BACKUP, }
+    conflicts = {EXCLUSIVE_BACKUP: CONCURRENT_BACKUP, CONCURRENT_BACKUP: EXCLUSIVE_BACKUP}
 
 
 class RecoveryOptions(CsvOption):
@@ -182,8 +176,7 @@ def parse_time_interval(value):
     result = _TIME_INTERVAL_RE.match(value)
     # if the string doesn't match, the option is invalid
     if not result:
-        raise ValueError("Invalid value for a time interval %s" %
-                         value)
+        raise ValueError("Invalid value for a time interval {}".format(value))
     # if the int conversion
     value = int(result.groups()[0])
     unit = result.groups()[1][0].lower()
@@ -197,7 +190,7 @@ def parse_time_interval(value):
         time_delta = datetime.timedelta(days=(31 * value))
     else:
         # This should never happen
-        raise ValueError("Invalid unit time %s" % unit)
+        raise ValueError("Invalid unit time {}".format(unit))
 
     return time_delta
 
@@ -215,9 +208,8 @@ def parse_reuse_backup(value):
         return None
     if value.lower() in REUSE_BACKUP_VALUES:
         return value.lower()
-    raise ValueError(
-        "Invalid value (use '%s' or '%s')" % (
-            "', '".join(REUSE_BACKUP_VALUES[:-1]), REUSE_BACKUP_VALUES[-1]))
+    raise ValueError("Invalid value (use '{}' or '{}')".format("', '".join(REUSE_BACKUP_VALUES[:-1]),
+                                                                REUSE_BACKUP_VALUES[-1]))
 
 
 def parse_backup_method(value):
@@ -233,9 +225,7 @@ def parse_backup_method(value):
         return None
     if value.lower() in BACKUP_METHOD_VALUES:
         return value.lower()
-    raise ValueError(
-        "Invalid value (must be one in: '%s')" % (
-            "', '".join(BACKUP_METHOD_VALUES)))
+    raise ValueError("Invalid value (must be one in: '{}')".format("', '".join(BACKUP_METHOD_VALUES)))
 
 
 class ServerConfig(object):
@@ -368,7 +358,7 @@ class ServerConfig(object):
         'active': 'true',
         'archiver': 'off',
         'archiver_batch_size': '0',
-        'backup_directory': '%(barman_home)s/%(name)s',
+        'backup_directory': '%(frabit_home)s/%(name)s',
         'backup_method': 'rsync',
         'backup_options': '',
         'basebackup_retry_sleep': '30',
@@ -387,8 +377,8 @@ class ServerConfig(object):
         'retention_policy_mode': 'auto',
         'streaming_archiver': 'off',
         'streaming_archiver_batch_size': '0',
-        'streaming_archiver_name': 'barman_receive_wal',
-        'streaming_backup_name': 'barman_streaming_backup',
+        'streaming_archiver_name': 'frabit_receive_wal',
+        'streaming_backup_name': 'frabit_streaming_backup',
         'streaming_conninfo': '%(conninfo)s',
         'streaming_wals_directory': '%(backup_directory)s/streaming',
         'wal_retention_policy': 'main',
@@ -466,8 +456,8 @@ class ServerConfig(object):
         self.msg_list = []
         self.config = config
         self.name = name
-        self.flyrabbit_home = config.flyrabbit_home
-        self.flyrabbit_lock_directory = config.flyrabbit_lock_directory
+        self.frabit_home = config.frabit_home
+        self.frabit_lock_directory = config.frabit_lock_directory
         config.validate_server_config(self.name)
         for key in ServerConfig.KEYS:
             value = None
@@ -479,7 +469,7 @@ class ServerConfig(object):
                 source = '{} section'.format(name)
                 value = self.invoke_parser(key, source, value, new_value)
                 # If the setting isn't present in [name] section of config file
-                # check if it has to be inherited from the [barman] section
+                # check if it has to be inherited from the [frabit] section
                 if value is None and key in ServerConfig.BARMAN_KEYS:
                     new_value = config.get('frabit',
                                            key,
@@ -515,7 +505,7 @@ class ServerConfig(object):
 
         If tablespace is None, it returns the global bandwidth limit
 
-        :param barman.infofile.Tablespace tablespace: the tablespace to copy
+        :param frabit.infofile.Tablespace tablespace: the tablespace to copy
         :rtype: str
         """
         # Default to global bandwidth limit
@@ -531,65 +521,42 @@ class ServerConfig(object):
 
 
 class Config(object):
-    """This class represents the barman configuration.
+    """This class represents the frabit configuration.
 
-    Default configuration files are /etc/barman.conf,
-    /etc/barman/barman.conf
-    and ~/.barman.conf for a per-user configuration
+    Default configuration files are /etc/frabit/frabit.conf
     """
-    CONFIG_FILES = [
-        '~/.frabit.conf',
-        '/etc/frabit.conf',
-        '/etc/frabit/frabit.conf',
-    ]
+    CONFIG_FILES = ['/etc/frabit/frabit.conf']
 
     _QUOTE_RE = re.compile(r"""^(["'])(.*)\1$""")
 
     def __init__(self, filename=None):
         #  In Python 3 ConfigParser has changed to be strict by default.
-        #  Flyrabbit wants to preserve the Python 2 behavior, so we are
-        #  explicitly building it passing strict=False.
-        try:
-            # Python 3.x
-            self._config = ConfigParser(strict=False)
-        except TypeError:
-            # Python 2.x
-            self._config = ConfigParser()
+        self._config = ConfigParser(strict=False)
         if filename:
             if hasattr(filename, 'read'):
-                try:
-                    # Python 3.x
-                    self._config.read_file(filename)
-                except AttributeError:
-                    # Python 2.x
-                    self._config.readfp(filename)
+                self._config.read_file(filename)
             else:
                 # check for the existence of the user defined file
                 if not os.path.exists(filename):
-                    sys.exit("Configuration file '%s' does not exist" %
-                             filename)
+                    sys.exit("Configuration file '{}' does not exist".format(filename))
                 self._config.read(os.path.expanduser(filename))
         else:
-            # Check for the presence of configuration files
-            # inside default directories
+            # Check for the presence of configuration files inside default directories
             for path in self.CONFIG_FILES:
                 full_path = os.path.expanduser(path)
-                if os.path.exists(full_path) \
-                        and full_path in self._config.read(full_path):
+                if os.path.exists(full_path) and full_path in self._config.read(full_path):
                     filename = full_path
                     break
             else:
-                sys.exit("Could not find any configuration file at "
-                         "default locations.\n"
-                         "Check Barman's documentation for more help.")
+                sys.exit("Could not find any configuration file at default locations.\n"
+                         "Check Frabit's documentation for more help.")
         self.config_file = filename
         self._servers = None
         self.servers_msg_list = []
         self._parse_global_config()
 
     def get(self, section, option, defaults=None, none_value=None):
-        """Method to get the value from a given section from
-        Barman configuration
+        """Method to get the value from a given section from Frabit configuration
         """
         if not self._config.has_section(section):
             return None
@@ -607,16 +574,13 @@ class Config(object):
         """
         This method parses the global [frabit] section
         """
-        self.flyrabbit_home = self.get('frabit', 'flyrabbit_home')
-        self.flyrabbit_lock_directory = self.get(
-            'frabit', 'flyrabbit_lock_directory') or self.flyrabbit_home
-        self.user = self.get('frabit', 'flyrabbit_user') or DEFAULT_USER
+        self.frabit_home = self.get('frabit', 'frabit_home')
+        self.frabit_lock_directory = self.get('frabit', 'frabit_lock_directory') or self.frabit_home
+        self.user = self.get('frabit', 'frabit_user') or DEFAULT_USER
         self.log_file = self.get('frabit', 'log_file')
-        self.log_format = self.get(
-            'frabit', 'log_format') or DEFAULT_LOG_FORMAT
+        self.log_format = self.get('frabit', 'log_format') or DEFAULT_LOG_FORMAT
         self.log_level = self.get('frabit', 'log_level') or DEFAULT_LOG_LEVEL
-        # save the raw frabit section to be compared later in
-        # _is_global_config_changed() method
+        # save the raw frabit section to be compared later in _is_global_config_changed() method
         self._global_config = set(self._config.items('frabit'))
 
     def _is_global_config_changed(self):
@@ -625,32 +589,28 @@ class Config(object):
 
     def load_configuration_files_directory(self):
         """
-        Read the "configuration_files_directory" option and load all the
-        configuration files with the .conf suffix that lie in that folder
+        Read the "configuration_files_directory" option and load all the configuration files with the .conf suffix
+        that lie in that folder
         """
 
-        config_files_directory = self.get('frabit',
-                                          'configuration_files_directory')
+        config_files_directory = self.get('frabit', 'configuration_files_directory')
 
         if not config_files_directory:
             return
 
         if not os.path.isdir(os.path.expanduser(config_files_directory)):
-            _logger.warn(
-                'Ignoring the "configuration_files_directory" option as "{}" '
-                'is not a directory'.format(config_files_directory))
+            _logger.warn('Ignoring the "configuration_files_directory" option as "{}" is not a directory'.format(
+                config_files_directory))
             return
 
-        for cfile in sorted(iglob(
-                os.path.join(os.path.expanduser(config_files_directory),
-                             '*.conf'))):
+        for cfile in sorted(iglob(os.path.join(os.path.expanduser(config_files_directory), '*.conf'))):
             filename = os.path.basename(cfile)
             if os.path.isfile(cfile):
                 # Load a file
                 _logger.debug('Including configuration file: {}'.format(filename))
                 self._config.read(cfile)
                 if self._is_global_config_changed():
-                    msg = "the configuration file {} contains a not empty [frabit] section".format(filename)
+                    msg = "The configuration file {} contains a not empty [frabit] section".format(filename)
                     _logger.fatal(msg)
                     raise SystemExit("FATAL: {}".format(msg))
             else:
@@ -659,13 +619,10 @@ class Config(object):
 
     def _populate_servers(self):
         """
-        Populate server list from configuration file
+        Populate server list from config file
 
-        Also check for paths errors in configuration.
-        If two or more paths overlap in
-        a single server, that server is disabled.
-        If two or more directory paths overlap between
-        different servers an error is raised.
+        Also check for paths errors in config. If two or more paths overlap in a single server,that server is disabled.
+        If two or more directory paths overlap between different servers an error is raised.
         """
 
         # Populate servers
@@ -685,7 +642,7 @@ class Config(object):
             # Create a ServerConfig object
             self._servers[section] = ServerConfig(self, section)
 
-        # Check for conflicting paths in Barman configuration
+        # Check for conflicting paths in Frabit configuration
         self._check_conflicting_paths()
 
     def _check_conflicting_paths(self):
@@ -707,24 +664,17 @@ class Config(object):
             # Paths map
             section_conf = self._servers[section]
             config_paths = {
-                'backup_directory':
-                    section_conf.backup_directory,
-                'basebackups_directory':
-                    section_conf.basebackups_directory,
-                'errors_directory':
-                    section_conf.errors_directory,
-                'incoming_wals_directory':
-                    section_conf.incoming_wals_directory,
-                'streaming_wals_directory':
-                    section_conf.streaming_wals_directory,
-                'wals_directory':
-                    section_conf.wals_directory,
+                'backup_directory': section_conf.backup_directory,
+                'basebackups_directory': section_conf.basebackups_directory,
+                'errors_directory': section_conf.errors_directory,
+                'incoming_wals_directory': section_conf.incoming_wals_directory,
+                'streaming_wals_directory': section_conf.streaming_wals_directory,
+                'wals_directory': section_conf.wals_directory
             }
 
             # Check for path errors
             for label, path in sorted(config_paths.items()):
-                # If the path does not conflict with the others, add it to the
-                # paths map
+                # If the path does not conflict with the others, add it to the paths map
                 real_path = os.path.realpath(path)
                 if real_path not in servers_paths:
                     servers_paths[real_path] = PathConflict(label, section)
@@ -733,20 +683,21 @@ class Config(object):
                         # Internal path error.
                         # Insert the error message into the server.msg_list
                         if real_path == path:
-                            self._servers[section].msg_list.append(
-                                "Conflicting path: %s=%s conflicts with "
-                                "'%s' for server '%s'" % (
-                                    label, path,
-                                    servers_paths[real_path].label,
-                                    servers_paths[real_path].server))
+                            self._servers[section].msg_list.append("Conflicting path: {label}={path} conflicts with "
+                            "'{real_lable}' for server '{real_path}'".format(label=label,  path=path,
+                                                                             real_lable=servers_paths[real_path].label,
+                                                                             real_server=servers_paths[real_path].server
+                                                                             )
+                                                                   )
                         else:
                             # Symbolic link
                             self._servers[section].msg_list.append(
-                                "Conflicting path: %s=%s (symlink to: %s) "
-                                "conflicts with '%s' for server '%s'" % (
-                                    label, path, real_path,
-                                    servers_paths[real_path].label,
-                                    servers_paths[real_path].server))
+                                "Conflicting path: {label}={path} (symlink to: {real_path}) "
+                                "conflicts with '{real_label}' for server '{real_server}'".format(
+                                    label=label, path=path, real_path=real_path,
+                                    real_label=servers_paths[real_path].label,
+                                    real_server=servers_paths[real_path].server)
+                            )
                         # Disable the server
                         self._servers[section].disabled = True
                     else:
@@ -754,21 +705,21 @@ class Config(object):
                         # Insert the error message into the global msg_list
                         if real_path == path:
                             self.servers_msg_list.append(
-                                "Conflicting path: "
-                                "%s=%s for server '%s' conflicts with "
-                                "'%s' for server '%s'" % (
-                                    label, path, section,
-                                    servers_paths[real_path].label,
-                                    servers_paths[real_path].server))
+                                "Conflicting path: {label}={path} for server '{section}' conflicts with "
+                                "'{real_label}' for server '{real_server}'".format(
+                                    label=label, path=path, section=section,
+                                    real_label=servers_paths[real_path].label,
+                                    real_server=servers_paths[real_path].server)
+                            )
                         else:
                             # Symbolic link
                             self.servers_msg_list.append(
-                                "Conflicting path: "
-                                "%s=%s (symlink to: %s) for server '%s' "
-                                "conflicts with '%s' for server '%s'" % (
-                                    label, path, real_path, section,
-                                    servers_paths[real_path].label,
-                                    servers_paths[real_path].server))
+                                "Conflicting path: {label}={path} (symlink to: {real_path}) for server '{section}' "
+                                "conflicts with '{real_label}' for server '{real_server}'".format(
+                                    label=label, path=path, real_path=real_path, section=section,
+                                    real_label=servers_paths[real_path].label,
+                                    real_server=servers_paths[real_path].server)
+                            )
 
     def server_names(self):
         """This method returns a list of server names"""
@@ -793,17 +744,15 @@ class Config(object):
         """
         Validate global configuration parameters
         """
-        # Check for the existence of unexpected parameters in the
-        # global section of the configuration file
-        keys = ['barman_home',
-                'barman_lock_directory',
-                'barman_user',
+        # Check for the existence of unexpected parameters in the global section of the configuration file
+        keys = ['frabit_home',
+                'frabit_lock_directory',
+                'frabit_user',
                 'log_file',
                 'log_level',
                 'configuration_files_directory']
         keys.extend(ServerConfig.KEYS)
-        self._validate_with_keys(self._global_config,
-                                 keys, 'barman')
+        self._validate_with_keys(self._global_config, keys, 'frabit')
 
     def validate_server_config(self, server):
         """
@@ -813,8 +762,7 @@ class Config(object):
         """
         # Check for the existence of unexpected parameters in the
         # server section of the configuration file
-        self._validate_with_keys(self._config.items(server),
-                                 ServerConfig.KEYS, server)
+        self._validate_with_keys(self._config.items(server), ServerConfig.KEYS, server)
 
     @staticmethod
     def _validate_with_keys(config_items, allowed_keys, section):
@@ -831,8 +779,9 @@ class Config(object):
             # then output a warning
             name = parameter[0]
             if name not in allowed_keys:
-                output.warning('Invalid configuration option "%s" in [%s] '
-                               'section.', name, section)
+                output.warning('Invalid configuration option "{name}" in [{section}] section.'.format(name=name,
+                                                                                                      section=section
+                                                                                                      ))
 
 
 # easy raw config diagnostic with python -m
@@ -842,9 +791,9 @@ def _main():
     r = Config()
     r.load_configuration_files_directory()
     for section in r._config.sections():
-        print("Section: %s" % section)
+        print("Section: {}".format(section))
         for option in r._config.options(section):
-            print("\t%s = %s " % (option, r.get(section, option)))
+            print("\t{option} = {value}".format(option=option, value=r.get(section, option)))
 
 
 if __name__ == "__main__":
