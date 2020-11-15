@@ -3,6 +3,7 @@
 #
 # This file is part of Frabit
 #
+from mysql.connector.errors import DatabaseError, InterfaceError, PoolError
 
 
 class FrabitException(Exception):
@@ -31,9 +32,57 @@ class CompressionException(FrabitException):
     """
 
 
-class MysqlException(FrabitException):
+class MysqlException(DatabaseError):
     """
-    Base exception for all the errors related to PostgreSQL.
+    Exception for errors related to the database for MySQL.
+    """
+
+
+class MysqlDataError(MysqlException):
+    """
+    Exception for errors reporting problems with processed data related to MySQL.
+    """
+
+
+class MysqlIntegrityError(MysqlException):
+    """
+    Exception for errors regarding relational integrity related to MySQL.
+    """
+
+
+class MysqlInternalError(MysqlException):
+    """
+    Exception for errors internal database errors related to MySQL.
+    """
+
+
+class MysqlOperationalError(MysqlException):
+    """
+    Exception for errors related to the database's operation for MySQL.
+    """
+
+
+class MysqlNotSupportedError(MysqlException):
+    """
+    Exception for errors when an unsupported database feature was used for MySQL.
+    """
+
+
+class MysqlProgrammingError(MysqlException):
+    """
+    Exception for errors programming errors for MySQL.
+    """
+
+
+class MysqlConnectError(PoolError):
+    """
+    Exception for errors relating to connection pooling related to MySQL
+    """
+
+
+class MysqlInterfaceError(InterfaceError):
+    """
+    Exception for errors related to the interface related to MySQL
     """
 
 

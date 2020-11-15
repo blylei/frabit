@@ -11,9 +11,11 @@ import sys
 import re
 import datetime
 import time
+import logging
 
 import mysql
 from mysql import connector
+from abc import abstractmethod, abstractclassmethod, ABCMeta
 
 import frabit
 from frabit import utils
@@ -21,25 +23,13 @@ from frabit import exceptions
 from frabit import output
 
 from frabit.exceptions import (
-    ConninfoException, PostgresAppNameError, PostgresConnectionError,
-    PostgresDuplicateReplicationSlot, PostgresException,
-    PostgresInvalidReplicationSlot, PostgresIsInRecovery,
-    PostgresReplicationSlotInUse, PostgresReplicationSlotsFull,
+    ConninfoException, MysqlConnectError, MysqlException,
     BackupFunctionsAccessRequired,
-    PostgresSuperuserRequired, PostgresUnsupportedFeature)
+)
 from frabit.infofile import Tablespace
-from frabit.postgres_plumbing import function_name_map
 from frabit.remote_status import RemoteStatusMixin
 from frabit.utils import force_str, simplify_version, with_metaclass
 from frabit.binlog import DEFAULT_XLOG_SEG_SIZE
-
-# This is necessary because the CONFIGURATION_LIMIT_EXCEEDED constant
-# has been added in psycopg2 2.5, but Barman supports version 2.4.2+ so
-# in case of import error we declare a constant providing the correct value.
-try:
-    from psycopg2.errorcodes import CONFIGURATION_LIMIT_EXCEEDED
-except ImportError:
-    CONFIGURATION_LIMIT_EXCEEDED = '53400'
 
 
 _logger = logging.getLogger(__name__)
@@ -64,9 +54,9 @@ def _atexit():
         conn.close()
 
 
-class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
+class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
     """
-    This abstract class represents a generic interface to a PostgreSQL server.
+    This abstract class represents a generic interface to a MySQL server.
     """
 
     CHECK_QUERY = 'SELECT 1'
@@ -77,7 +67,7 @@ class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
 
         :param str conninfo: Connection information (aka DSN)
         """
-        super(PostgreSQL, self).__init__()
+        super(MySQL, self).__init__()
         self.conninfo = conninfo
         self._conn = None
         self.allow_reconnect = True
@@ -87,9 +77,7 @@ class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
             self.conn_parameters = self.parse_dsn(conninfo)
         except (ValueError, TypeError) as e:
             _logger.debug(e)
-            raise ConninfoException('Cannot connect to postgres: "%s" '
-                                    'is not a valid connection string' %
-                                    conninfo)
+            raise ConninfoException('Cannot connect to mysql: "%s" is not a valid connection string'.format(conninfo))
 
     @staticmethod
     def parse_dsn(dsn):
@@ -115,21 +103,15 @@ class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         return ' '.join(
             ["%s=%s" % (k, v) for k, v in sorted(parameters.items())])
 
-    def get_connection_string(self, application_name=None):
+    def get_connection_string(self):
         """
         Return the connection string, adding the application_name parameter
         if requested, unless already defined by user in the connection string
 
-        :param str application_name: the application_name to add
         :return str: the connection string
         """
         conn_string = self.conninfo
         # check if the application name is already defined by user
-        if application_name and 'application_name' not in self.conn_parameters:
-            # Then add the it to the connection string
-            conn_string += ' application_name=%s' % application_name
-        # adopt a secure schema-usage pattern. See:
-        # https://www.postgresql.org/docs/current/libpq-connect.html
         if 'options' not in self.conn_parameters:
             conn_string += ' options=-csearch_path='
 
@@ -137,16 +119,16 @@ class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
 
     def connect(self):
         """
-        Generic function for Postgres connection (using psycopg2)
+        Generic function for MySQL connection (using mysql-connector-python)
         """
 
         if not self._check_connection():
             try:
-                self._conn = psycopg2.connect(self.conninfo)
+                self._conn = mysql.connector.connect(self.conninfo)
             # If psycopg2 fails to connect to the host,
             # raise the appropriate exception
-            except psycopg2.DatabaseError as e:
-                raise PostgresConnectionError(force_str(e).strip())
+            except connector.DatabaseError as e:
+                raise MysqlConnectionError(force_str(e).strip())
             # Register the connection to the list of live connections
             _live_connections.append(self)
         return self._conn
@@ -252,146 +234,7 @@ class PostgreSQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
         return None
 
 
-class StreamingConnection(PostgreSQL):
-    """
-    This class represents a streaming connection to a PostgreSQL server.
-    """
-
-    CHECK_QUERY = 'IDENTIFY_SYSTEM'
-
-    def __init__(self, conninfo):
-        """
-        Streaming connection constructor
-
-        :param str conninfo: Connection information (aka DSN)
-        """
-        super(StreamingConnection, self).__init__(conninfo)
-
-        # Make sure we connect using the 'replication' option which
-        # triggers streaming replication protocol communication
-        self.conn_parameters['replication'] = 'true'
-        # ensure that the datestyle is set to iso, working around an
-        # issue in some psycopg2 versions
-        self.conn_parameters['options'] = '-cdatestyle=iso'
-        # Override 'dbname' parameter. This operation is required to mimic
-        # the behaviour of pg_receivexlog and pg_basebackup
-        self.conn_parameters['dbname'] = 'replication'
-        # Rebuild the conninfo string from the modified parameter lists
-        self.conninfo = self.encode_dsn(self.conn_parameters)
-
-    def connect(self):
-        """
-        Connect to the PostgreSQL server. It reuses an existing connection.
-
-        :returns: the connection to the server
-        """
-        if self._check_connection():
-            return self._conn
-
-        # Build a connection and set autocommit
-        self._conn = super(StreamingConnection, self).connect()
-        self._conn.autocommit = True
-        return self._conn
-
-    def fetch_remote_status(self):
-        """
-        Returns the status of the connection to the PostgreSQL server.
-
-        This method does not raise any exception in case of errors,
-        but set the missing values to None in the resulting dictionary.
-
-        :rtype: dict[str, None|str]
-        """
-        result = dict.fromkeys(
-            ('connection_error', 'streaming_supported',
-                'streaming', 'streaming_systemid',
-                'timeline', 'xlogpos'),
-            None)
-        try:
-            # If the server is too old to support `pg_receivexlog`,
-            # exit immediately.
-            # This needs to be protected by the try/except because
-            # `self.server_version` can raise a PostgresConnectionError
-            if self.server_version < 90200:
-                result["streaming_supported"] = False
-                return result
-            result["streaming_supported"] = True
-            # Execute a IDENTIFY_SYSYEM to check the connection
-            cursor = self._cursor()
-            cursor.execute("IDENTIFY_SYSTEM")
-            row = cursor.fetchone()
-            # If something has been returned, barman is connected
-            # to a replication backend
-            if row:
-                result['streaming'] = True
-                # IDENTIFY_SYSTEM always returns at least two values
-                result['streaming_systemid'] = row[0]
-                result['timeline'] = row[1]
-                # PostgreSQL 9.1+ returns also the current xlog flush location
-                if len(row) > 2:
-                    result['xlogpos'] = row[2]
-        except psycopg2.ProgrammingError:
-            # This is not a streaming connection
-            result['streaming'] = False
-        except PostgresConnectionError as e:
-            result['connection_error'] = force_str(e).strip()
-            _logger.warning("Error retrieving PostgreSQL status: %s",
-                            force_str(e).strip())
-        return result
-
-    def create_physical_repslot(self, slot_name):
-        """
-        Create a physical replication slot using the streaming connection
-        :param str slot_name: Replication slot name
-        """
-        cursor = self._cursor()
-        try:
-            # In the following query, the slot name is directly passed
-            # to the CREATE_REPLICATION_SLOT command, without any
-            # quoting. This is a characteristic of the streaming
-            # connection, otherwise if will fail with a generic
-            # "syntax error"
-            cursor.execute('CREATE_REPLICATION_SLOT %s PHYSICAL' % slot_name)
-            _logger.info("Replication slot '%s' successfully created",
-                         slot_name)
-        except psycopg2.DatabaseError as exc:
-            if exc.pgcode == DUPLICATE_OBJECT:
-                # A replication slot with the same name exists
-                raise PostgresDuplicateReplicationSlot()
-            elif exc.pgcode == CONFIGURATION_LIMIT_EXCEEDED:
-                # Unable to create a new physical replication slot.
-                # All slots are full.
-                raise PostgresReplicationSlotsFull()
-            else:
-                raise PostgresException(force_str(exc).strip())
-
-    def drop_repslot(self, slot_name):
-        """
-        Drop a physical replication slot using the streaming connection
-        :param str slot_name: Replication slot name
-        """
-        cursor = self._cursor()
-        try:
-            # In the following query, the slot name is directly passed
-            # to the DROP_REPLICATION_SLOT command, without any
-            # quoting. This is a characteristic of the streaming
-            # connection, otherwise if will fail with a generic
-            # "syntax error"
-            cursor.execute('DROP_REPLICATION_SLOT %s' % slot_name)
-            _logger.info("Replication slot '%s' successfully dropped",
-                         slot_name)
-        except psycopg2.DatabaseError as exc:
-            if exc.pgcode == UNDEFINED_OBJECT:
-                # A replication slot with the that name does not exist
-                raise PostgresInvalidReplicationSlot()
-            if exc.pgcode == OBJECT_IN_USE:
-                # The replication slot is still in use
-                raise PostgresReplicationSlotInUse()
-            else:
-                raise PostgresException(force_str(exc).strip())
-
-
-class PostgreSQLConnection(PostgreSQL):
+class MySQLConnection(MySQL):
     """
     This class represents a standard client connection to a PostgreSQL server.
     """
