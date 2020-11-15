@@ -45,7 +45,7 @@ with open('frabit/version.py', 'r') as fversion:
     exec(fversion.read(), frabit)
 
 setup(
-    name='barman',
+    name='frabit',
     version=frabit['__version__'],
     author='blylei Limited',
     author_email='blylei918@gmail.com',
