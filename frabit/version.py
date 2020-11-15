@@ -3,3 +3,8 @@
 #
 # This file is part of Frabit
 #
+'''
+This module contains the current Frabit version.
+'''
+
+__version__ = '2.0.1'
