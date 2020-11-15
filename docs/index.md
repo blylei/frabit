@@ -37,7 +37,5 @@
 ``` 
 Frabit 将备份策略，备份任务、备份实例以及巡检记录存储到MySQL数据库中。因此，在安装好Frabit之后，需要执行下列语句来初始化mydbs
 ```mysql-sql
-mysql -u root -p < frabit.sql
+mysql -u root -p < ${frabit_home}/script/init_frabit.sql
 ```
- 
-(操作手册)[./操作手册]
