@@ -16,7 +16,6 @@ import logging
 import mysql
 from mysql import connector
 from mysql.connector import errorcode
-from abc import abstractmethod, abstractclassmethod, ABCMeta
 
 import frabit
 from frabit import utils
@@ -225,7 +224,7 @@ class MySQL:
 
 class MySQLConnection(MySQL):
     """
-    This class represents a standard client connection to a PostgreSQL server.
+    This class represents a standard client connection to a MySQL server.
     """
 
     # Streaming replication client types
@@ -233,22 +232,18 @@ class MySQLConnection(MySQL):
     WALSTREAMER = 2
     ANY_STREAMING_CLIENT = (STANDBY, WALSTREAMER)
 
-    def __init__(self, conninfo, immediate_checkpoint=False, slot_name=None,
-                 application_name='barman'):
+    def __init__(self, conninfo):
         """
         PostgreSQL connection constructor.
 
         :param str conninfo: Connection information (aka DSN)
-        :param bool immediate_checkpoint: Whether to do an immediate checkpoint
-           when start a backup
-        :param str|None slot_name: Replication slot name
         """
         super(MySQLConnection, self).__init__(conninfo)
         self.configuration_files = None
 
     def connect(self):
         """
-        Connect to the PostgreSQL server. It reuses an existing connection.
+        Connect to the MySQL server. It reuses an existing connection.
         """
         if self._check_connection():
             return self._conn
@@ -260,8 +255,7 @@ class MySQLConnection(MySQL):
             try:
                 cur = self._conn.cursor()
                 # Do not use parameter substitution with SET
-                cur.execute('SET application_name TO %s' %
-                            self.application_name)
+                cur.execute('SET application_name TO %s'.format(self.application_name))
                 cur.close()
             # If psycopg2 fails to set the application name,
             # raise the appropriate exception
@@ -272,7 +266,7 @@ class MySQLConnection(MySQL):
     @property
     def server_txt_version(self):
         """
-        Human readable version of PostgreSQL (returned by the server)
+        Human readable version of MySQL (returned by the server)
         """
         try:
             cur = self._cursor()
@@ -707,26 +701,9 @@ class MySQLConnection(MySQL):
                             force_str(e).strip())
         return result
 
-    def get_systemid(self):
-        """
-        Get a Postgres instance systemid
-        """
-        if self.server_version < 90600:
-            return
-
-        try:
-            cur = self._cursor()
-            cur.execute(
-                'SELECT system_identifier::text FROM pg_control_system()')
-            return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL system Id: %s",
-                          force_str(e).strip())
-            return None
-
     def get_setting(self, name):
         """
-        Get a Postgres setting with a given name
+        Get a MySQL setting with a given name
 
         :param name: a parameter name
         """
@@ -737,29 +714,6 @@ class MySQLConnection(MySQL):
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug("Error retrieving PostgreSQL setting '%s': %s",
                           name.replace('"', '""'), force_str(e).strip())
-            return None
-
-    def get_tablespaces(self):
-        """
-        Returns a list of tablespaces or None if not present
-        """
-        try:
-            cur = self._cursor()
-            if self.server_version >= 90200:
-                cur.execute(
-                    "SELECT spcname, oid, "
-                    "pg_tablespace_location(oid) AS spclocation "
-                    "FROM pg_tablespace "
-                    "WHERE pg_tablespace_location(oid) != ''")
-            else:
-                cur.execute(
-                    "SELECT spcname, oid, spclocation "
-                    "FROM pg_tablespace WHERE spclocation != ''")
-            # Generate a list of tablespace objects
-            return [Tablespace._make(item) for item in cur.fetchall()]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL tablespaces: %s",
-                          force_str(e).strip())
             return None
 
     def get_configuration_files(self):
@@ -803,41 +757,6 @@ class MySQLConnection(MySQL):
             self.configuration_files = {}
 
         return self.configuration_files
-
-    def create_restore_point(self, target_name):
-        """
-        Create a restore point with the given target name
-
-        The method executes the pg_create_restore_point() function through
-        a PostgreSQL connection. Only for Postgres versions >= 9.1 when not
-        in replication.
-
-        If requirements are not met, the operation is skipped.
-
-        :param str target_name: name of the restore point
-
-        :returns: the restore point LSN
-        :rtype: str|None
-        """
-        if self.server_version < 90100:
-            return None
-
-        # Not possible if on a standby
-        # Called inside the pg_connect context to reuse the connection
-        if self.is_in_recovery:
-            return None
-
-        try:
-            cur = self._cursor()
-            cur.execute(
-                "SELECT pg_create_restore_point(%s)", [target_name])
-            _logger.info("Restore point '%s' successfully created",
-                         target_name)
-            return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug('Error issuing pg_create_restore_point()'
-                          'command: %s', force_str(e).strip())
-            return None
 
     def start_exclusive_backup(self, label):
         """
