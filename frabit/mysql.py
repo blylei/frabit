@@ -265,8 +265,8 @@ class MySQLConnection(MySQL):
                 cur.close()
             # If psycopg2 fails to set the application name,
             # raise the appropriate exception
-            except psycopg2.ProgrammingError as e:
-                raise PostgresAppNameError(force_str(e).strip())
+            except connector.ProgrammingError as e:
+                raise MysqlProgrammingError(force_str(e).strip())
         return self._conn
 
     @property
