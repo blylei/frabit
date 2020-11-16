@@ -24,6 +24,7 @@ from frabit import exceptions
 from frabit import output
 
 from frabit.exceptions import (ConninfoException,
+                               MysqlException,
                                MysqlDataError,
                                MysqlIntegrityError,
                                MysqlInternalError,
@@ -60,9 +61,9 @@ def _atexit():
         conn.close()
 
 
-class MySQL(with_metaclass(ABCMeta, RemoteStatusMixin)):
+class MySQL:
     """
-    This abstract class represents a generic interface to a MySQL server.
+    This  class represents a generic interface to a MySQL server.
     """
 
     CHECK_QUERY = 'SELECT 1;'
