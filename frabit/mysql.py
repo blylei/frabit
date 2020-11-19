@@ -951,144 +951,73 @@ class MySQLConnection(MySQL):
 
     def get_replication_stats(self, client_type=STANDBY):
         """
-        Returns streaming replication information
+        Returns replication information
         """
         try:
-            cur = self._cursor(cursor_factory=NamedTupleCursor)
+            cur = self._cursor()
 
             if not self.has_backup_privileges:
                 raise BackupFunctionsAccessRequired()
 
-            # pg_stat_replication is a system view that contains one
-            # row per WAL sender process with information about the
-            # replication status of a standby server. It has been
-            # introduced in MySQL 9.1. Current fields are:
-            #
-            # - pid (procpid in 9.1)
-            # - usesysid
-            # - usename
-            # - application_name
-            # - client_addr
-            # - client_hostname
-            # - client_port
-            # - backend_start
-            # - backend_xmin (9.4+)
-            # - state
-            # - sent_lsn (sent_location before 10)
-            # - write_lsn (write_location before 10)
-            # - flush_lsn (flush_location before 10)
-            # - replay_lsn (replay_location before 10)
-            # - sync_priority
-            # - sync_state
-            #
-
-            if self.server_version < 90100:
-                raise PostgresUnsupportedFeature('9.1')
-
-            from_repslot = ""
-            where_clauses = []
-            if self.server_version >= 100000:
-                # Current implementation (10+)
-                what = "r.*, rs.slot_name"
-                # Look for replication slot name
-                from_repslot = "LEFT JOIN pg_replication_slots rs " \
-                               "ON (r.pid = rs.active_pid) "
-                where_clauses += ["(rs.slot_type IS NULL OR "
-                                  "rs.slot_type = 'physical')"]
-            elif self.server_version >= 90500:
-                # MySQL 9.5/9.6
-                what = "pid, " \
-                       "usesysid, " \
-                       "usename, " \
-                       "application_name, " \
-                       "client_addr, " \
-                       "client_hostname, " \
-                       "client_port, " \
-                       "backend_start, " \
-                       "backend_xmin, " \
-                       "state, " \
-                       "sent_location AS sent_lsn, " \
-                       "write_location AS write_lsn, " \
-                       "flush_location AS flush_lsn, " \
-                       "replay_location AS replay_lsn, " \
-                       "sync_priority, " \
-                       "sync_state, " \
-                       "rs.slot_name"
-                # Look for replication slot name
-                from_repslot = "LEFT JOIN pg_replication_slots rs " \
-                               "ON (r.pid = rs.active_pid) "
-                where_clauses += ["(rs.slot_type IS NULL OR "
-                                  "rs.slot_type = 'physical')"]
-            elif self.server_version >= 90400:
-                # MySQL 9.4
-                what = "pid, " \
-                       "usesysid, " \
-                       "usename, " \
-                       "application_name, " \
-                       "client_addr, " \
-                       "client_hostname, " \
-                       "client_port, " \
-                       "backend_start, " \
-                       "backend_xmin, " \
-                       "state, " \
-                       "sent_location AS sent_lsn, " \
-                       "write_location AS write_lsn, " \
-                       "flush_location AS flush_lsn, " \
-                       "replay_location AS replay_lsn, " \
-                       "sync_priority, " \
-                       "sync_state"
-            elif self.server_version >= 90200:
-                # MySQL 9.2/9.3
-                what = "pid, " \
-                       "usesysid, " \
-                       "usename, " \
-                       "application_name, " \
-                       "client_addr, " \
-                       "client_hostname, " \
-                       "client_port, " \
-                       "backend_start, " \
-                       "CAST (NULL AS xid) AS backend_xmin, " \
-                       "state, " \
-                       "sent_location AS sent_lsn, " \
-                       "write_location AS write_lsn, " \
-                       "flush_location AS flush_lsn, " \
-                       "replay_location AS replay_lsn, " \
-                       "sync_priority, " \
-                       "sync_state"
-            else:
-                # MySQL 9.1
-                what = "procpid AS pid, " \
-                       "usesysid, " \
-                       "usename, " \
-                       "application_name, " \
-                       "client_addr, " \
-                       "client_hostname, " \
-                       "client_port, " \
-                       "backend_start, " \
-                       "CAST (NULL AS xid) AS backend_xmin, " \
-                       "state, " \
-                       "sent_location AS sent_lsn, " \
-                       "write_location AS write_lsn, " \
-                       "flush_location AS flush_lsn, " \
-                       "replay_location AS replay_lsn, " \
-                       "sync_priority, " \
-                       "sync_state"
-
-            # Streaming client
-            if client_type == self.STANDBY:
-                # Standby server
-                where_clauses += ['{replay_lsn} IS NOT NULL'.format(
-                    **self.name_map)]
-            elif client_type == self.WALSTREAMER:
-                # WAL streamer
-                where_clauses += ['{replay_lsn} IS NULL'.format(
-                    **self.name_map)]
-
-            if where_clauses:
-                where = 'WHERE %s ' % ' AND '.join(where_clauses)
-            else:
-                where = ''
-
+            '''
+            Slave_IO_State:
+            Master_Host:
+            Master_User:
+            Master_Port:
+            Connect_Retry:
+            Master_Log_File:
+            Read_Master_Log_Pos:
+            Relay_Log_File:
+            Relay_Log_Pos:
+            Relay_Master_Log_File:
+            Slave_IO_Running:
+            Slave_SQL_Running:
+            Replicate_Do_DB:
+            Replicate_Ignore_DB:
+            Replicate_Do_Table:
+            Replicate_Ignore_Table:
+            Replicate_Wild_Do_Table:
+            Replicate_Wild_Ignore_Table:
+            Last_Errno:
+            Last_Error:
+            Skip_Counter:
+            Exec_Master_Log_Pos:
+            Relay_Log_Space:
+            Until_Condition:
+            Until_Log_File:
+            Until_Log_Pos:
+            Master_SSL_Allowed:
+            Master_SSL_CA_File:
+            Master_SSL_CA_Path:
+            Master_SSL_Cert:
+            Master_SSL_Cipher:
+            Master_SSL_Key:
+            Seconds_Behind_Master:
+            Master_SSL_Verify_Server_Cert:
+            Last_IO_Errno:
+            Last_IO_Error:
+            Last_SQL_Errno:
+            Last_SQL_Error:
+            Replicate_Ignore_Server_Ids:
+            Master_Server_Id:
+            Master_UUID:
+            Master_Info_File:
+            SQL_Delay:
+            SQL_Remaining_Delay:
+            Slave_SQL_Running_State:
+            Master_Retry_Count:
+            Master_Bind:
+            Last_IO_Error_Timestamp:
+            Last_SQL_Error_Timestamp:
+            Master_SSL_Crl:
+            Master_SSL_Crlpath:
+            Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+            Auto_Position:
+            Replicate_Rewrite_DB:
+            Channel_Name:
+            Master_TLS_Version:
+            '''
             # Execute the query
             cur.execute(
                 "SELECT %s, "
