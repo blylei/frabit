@@ -621,7 +621,7 @@ class MySQLConnection(MySQL):
                             force_str(e).strip())
         return result
 
-    def get_setting(self, name):
+    def get_setting(self, name, is_global=True):
         """
         Get a MySQL setting with a given name
 
@@ -636,12 +636,11 @@ class MySQLConnection(MySQL):
                           name.replace('"', '""'), force_str(e).strip())
             return None
 
-    def get_configuration_files(self):
+    def get_variable(self):
         """
-        Get postgres configuration files or an empty dictionary
-        in case of error
+        Get MySQL configuration option
 
-        :rtype: dict
+        :rtype: str
         """
         if self.configuration_files:
             return self.configuration_files
@@ -653,24 +652,6 @@ class MySQLConnection(MySQL):
                 "WHERE name IN ('config_file', 'hba_file', 'ident_file')")
             for cname, cpath in cur.fetchall():
                 self.configuration_files[cname] = cpath
-
-            # Retrieve additional configuration files
-            # If MySQL is older than 8.4 disable this check
-            if self.server_version >= 80400:
-                cur.execute(
-                    "SELECT DISTINCT sourcefile AS included_file "
-                    "FROM pg_settings "
-                    "WHERE sourcefile IS NOT NULL "
-                    "AND sourcefile NOT IN "
-                    "(SELECT setting FROM pg_settings "
-                    "WHERE name = 'config_file') "
-                    "ORDER BY 1")
-                # Extract the values from the containing single element tuples
-                included_files = [included_file
-                                  for included_file, in cur.fetchall()]
-                if len(included_files) > 0:
-                    self.configuration_files['included_files'] = included_files
-
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug("Error retrieving MySQL configuration files "
                           "location: %s", force_str(e).strip())
@@ -678,249 +659,30 @@ class MySQLConnection(MySQL):
 
         return self.configuration_files
 
-    def start_exclusive_backup(self, label):
+    def get_status(self, name, is_global=True):
         """
-        Calls pg_start_backup() on the MySQL server
+        Get MySQL global or session status
 
-        This method returns a dictionary containing the following data:
-
-         * location
-         * file_name
-         * file_offset
-         * timestamp
-
-        :param str label: descriptive string to identify the backup
-        :rtype: psycopg2.extras.DictRow
+        :rtype: str
         """
+        if is_global:
+
+        if self.configuration_files:
+            return self.configuration_files
         try:
-            conn = self.connect()
-
-            # Rollback to release the transaction, as the pg_start_backup
-            # invocation can last up to MySQL's checkpoint_timeout
-            conn.rollback()
-
-            # Start an exclusive backup
-            cur = conn.cursor(cursor_factory=DictCursor)
-            if self.server_version < 80400:
-                cur.execute(
-                    "SELECT location, "
-                    "({pg_walfile_name_offset}(location)).*, "
-                    "now() AS timestamp "
-                    "FROM pg_start_backup(%s) AS location"
-                        .format(**self.name_map),
-                    (label,))
-            else:
-                cur.execute(
-                    "SELECT location, "
-                    "({pg_walfile_name_offset}(location)).*, "
-                    "now() AS timestamp "
-                    "FROM pg_start_backup(%s,%s) AS location"
-                        .format(**self.name_map),
-                    (label, self.immediate_checkpoint))
-
-            start_row = cur.fetchone()
-
-            # Rollback to release the transaction, as the connection
-            # is to be retained until the end of backup
-            conn.rollback()
-
-            return start_row
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = "pg_start_backup(): %s" % force_str(e).strip()
-            _logger.debug(msg)
-            raise PostgresException(msg)
-
-    def start_concurrent_backup(self, label):
-        """
-        Calls pg_start_backup on the MySQL server using the
-        API introduced with version 9.6
-
-        This method returns a dictionary containing the following data:
-
-         * location
-         * timeline
-         * timestamp
-
-        :param str label: descriptive string to identify the backup
-        :rtype: psycopg2.extras.DictRow
-        """
-        try:
-            conn = self.connect()
-
-            # Rollback to release the transaction, as the pg_start_backup
-            # invocation can last up to MySQL's checkpoint_timeout
-            conn.rollback()
-
-            # Start the backup using the api introduced in postgres 9.6
-            cur = conn.cursor(cursor_factory=DictCursor)
+            self.configuration_files = {}
+            cur = self._cursor()
             cur.execute(
-                "SELECT location, "
-                "(SELECT timeline_id "
-                "FROM pg_control_checkpoint()) AS timeline, "
-                "now() AS timestamp "
-                "FROM pg_start_backup(%s, %s, FALSE) AS location",
-                (label, self.immediate_checkpoint))
-            start_row = cur.fetchone()
-
-            # Rollback to release the transaction, as the connection
-            # is to be retained until the end of backup
-            conn.rollback()
-
-            return start_row
+                "SELECT name, setting FROM pg_settings "
+                "WHERE name IN ('config_file', 'hba_file', 'ident_file')")
+            for cname, cpath in cur.fetchall():
+                self.configuration_files[cname] = cpath
         except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = "pg_start_backup command: %s" % (force_str(e).strip(),)
-            _logger.debug(msg)
-            raise PostgresException(msg)
+            _logger.debug("Error retrieving MySQL configuration files "
+                          "location: %s", force_str(e).strip())
+            self.configuration_files = {}
 
-    def stop_exclusive_backup(self):
-        """
-        Calls pg_stop_backup() on the MySQL server
-
-        This method returns a dictionary containing the following data:
-
-         * location
-         * file_name
-         * file_offset
-         * timestamp
-
-        :rtype: psycopg2.extras.DictRow
-        """
-        try:
-            conn = self.connect()
-
-            # Rollback to release the transaction, as the pg_stop_backup
-            # invocation could will wait until the current WAL file is shipped
-            conn.rollback()
-
-            # Stop the backup
-            cur = conn.cursor(cursor_factory=DictCursor)
-            cur.execute(
-                "SELECT location, "
-                "({pg_walfile_name_offset}(location)).*, "
-                "now() AS timestamp "
-                "FROM pg_stop_backup() AS location"
-                    .format(**self.name_map)
-            )
-
-            return cur.fetchone()
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = ("Error issuing pg_stop_backup command: %s" %
-                   force_str(e).strip())
-            _logger.debug(msg)
-            raise PostgresException(
-                'Cannot terminate exclusive backup. '
-                'You might have to manually execute pg_stop_backup '
-                'on your MySQL server')
-
-    def stop_concurrent_backup(self):
-        """
-        Calls pg_stop_backup on the MySQL server using the
-        API introduced with version 9.6
-
-        This method returns a dictionary containing the following data:
-
-         * location
-         * timeline
-         * backup_label
-         * timestamp
-
-        :rtype: psycopg2.extras.DictRow
-        """
-        try:
-            conn = self.connect()
-
-            # Rollback to release the transaction, as the pg_stop_backup
-            # invocation could will wait until the current WAL file is shipped
-            conn.rollback()
-
-            # Stop the backup  using the api introduced with version 9.6
-            cur = conn.cursor(cursor_factory=DictCursor)
-            cur.execute(
-                'SELECT end_row.lsn AS location, '
-                '(SELECT CASE WHEN pg_is_in_recovery() '
-                'THEN min_recovery_end_timeline ELSE timeline_id END '
-                'FROM pg_control_checkpoint(), pg_control_recovery()'
-                ') AS timeline, '
-                'end_row.labelfile AS backup_label, '
-                'now() AS timestamp FROM pg_stop_backup(FALSE) AS end_row')
-
-            return cur.fetchone()
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = ("Error issuing pg_stop_backup command: %s" %
-                   force_str(e).strip())
-            _logger.debug(msg)
-            raise PostgresException(msg)
-
-    def pgespresso_start_backup(self, label):
-        """
-        Execute a pgespresso_start_backup
-
-        This method returns a dictionary containing the following data:
-
-         * backup_label
-         * timestamp
-
-        :param str label: descriptive string to identify the backup
-        :rtype: psycopg2.extras.DictRow
-        """
-        try:
-            conn = self.connect()
-
-            # Rollback to release the transaction,
-            # as the pgespresso_start_backup invocation can last
-            # up to MySQL's checkpoint_timeout
-            conn.rollback()
-
-            # Start the concurrent backup using pgespresso
-            cur = conn.cursor(cursor_factory=DictCursor)
-            cur.execute(
-                'SELECT pgespresso_start_backup(%s,%s) AS backup_label, '
-                'now() AS timestamp',
-                (label, self.immediate_checkpoint))
-
-            start_row = cur.fetchone()
-
-            # Rollback to release the transaction, as the connection
-            # is to be retained until the end of backup
-            conn.rollback()
-
-            return start_row
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = "pgespresso_start_backup(): %s" % force_str(e).strip()
-            _logger.debug(msg)
-            raise PostgresException(msg)
-
-    def pgespresso_stop_backup(self, backup_label):
-        """
-        Execute a pgespresso_stop_backup
-
-        This method returns a dictionary containing the following data:
-
-         * end_wal
-         * timestamp
-
-        :param str backup_label: backup label as returned
-            by pgespress_start_backup
-        :rtype: psycopg2.extras.DictRow
-        """
-        try:
-            conn = self.connect()
-            # Issue a rollback to release any unneeded lock
-            conn.rollback()
-            cur = conn.cursor(cursor_factory=DictCursor)
-            cur.execute("SELECT pgespresso_stop_backup(%s) AS end_wal, "
-                        "now() AS timestamp",
-                        (backup_label,))
-            return cur.fetchone()
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            msg = "Error issuing pgespresso_stop_backup() command: %s" % (
-                force_str(e).strip())
-            _logger.debug(msg)
-            raise PostgresException(
-                '%s\n'
-                'HINT: You might have to manually execute '
-                'pgespresso_abort_backup() on your MySQL '
-                'server' % msg)
+        return self.configuration_files
 
     def flush_binlog(self):
         """
@@ -949,7 +711,7 @@ class MySQLConnection(MySQL):
                 force_str(e).strip())
             return None
 
-    def get_replication_stats(self, client_type=STANDBY):
+    def get_replication_stats(self):
         """
         Returns replication information dict
         """
