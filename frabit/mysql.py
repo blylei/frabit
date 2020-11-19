@@ -1110,37 +1110,3 @@ class MySQLConnection(MySQL):
             _logger.debug("Error retrieving status of standby servers: %s",
                           force_str(e).strip())
             return None
-
-    def get_replication_slot(self, slot_name):
-        """
-        Retrieve from the MySQL server a physical replication slot
-        with a specific slot_name.
-
-        This method returns a dictionary containing the following data:
-
-         * slot_name
-         * active
-         * restart_lsn
-
-        :param str slot_name: the replication slot name
-        :rtype: psycopg2.extras.DictRow
-        """
-        if self.server_version < 90400:
-            # Raise exception if replication slot are not supported
-            # by MySQL version
-            raise PostgresUnsupportedFeature('9.4')
-        else:
-            cur = self._cursor(cursor_factory=NamedTupleCursor)
-            try:
-                cur.execute("SELECT slot_name, "
-                            "active, "
-                            "restart_lsn "
-                            "FROM pg_replication_slots "
-                            "WHERE slot_type = 'physical' "
-                            "AND slot_name = '%s'" % slot_name)
-                # Retrieve the replication slot information
-                return cur.fetchone()
-            except (PostgresConnectionError, psycopg2.Error) as e:
-                _logger.debug("Error retrieving replication_slots: %s",
-                              force_str(e).strip())
-                raise
