@@ -951,7 +951,7 @@ class MySQLConnection(MySQL):
 
     def get_replication_stats(self, client_type=STANDBY):
         """
-        Returns replication information
+        Returns replication information dict
         """
         try:
             cur = self._cursor()
