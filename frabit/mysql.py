@@ -38,7 +38,6 @@ from frabit.remote_status import RemoteStatusMixin
 from frabit.utils import force_str, simplify_version, with_metaclass
 from frabit.binlog import DEFAULT_XLOG_SEG_SIZE
 
-
 _logger = logging.getLogger(__name__)
 
 _live_connections = []
@@ -227,14 +226,9 @@ class MySQLConnection(MySQL):
     This class represents a standard client connection to a MySQL server.
     """
 
-    # Streaming replication client types
-    STANDBY = 1
-    WALSTREAMER = 2
-    ANY_STREAMING_CLIENT = (STANDBY, WALSTREAMER)
-
     def __init__(self, conninfo):
         """
-        PostgreSQL connection constructor.
+        MySQl connection constructor.
 
         :param str conninfo: Connection information (aka DSN)
         """
@@ -247,20 +241,8 @@ class MySQLConnection(MySQL):
         """
         if self._check_connection():
             return self._conn
-
+        # create a new connection if not an existing connection
         self._conn = super(MySQLConnection, self).connect()
-        server_version = self._conn.server_version
-        use_app_name = 'application_name' in self.conn_parameters
-        if server_version >= 90000 and not use_app_name:
-            try:
-                cur = self._conn.cursor()
-                # Do not use parameter substitution with SET
-                cur.execute('SET application_name TO %s'.format(self.application_name))
-                cur.close()
-            # If psycopg2 fails to set the application name,
-            # raise the appropriate exception
-            except connector.ProgrammingError as e:
-                raise MysqlProgrammingError(force_str(e).strip())
         return self._conn
 
     @property
@@ -272,45 +254,8 @@ class MySQLConnection(MySQL):
             cur = self._cursor()
             cur.execute("SELECT version()")
             return cur.fetchone()[0].split()[1]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL version: %s",
-                          force_str(e).strip())
-            return None
-
-    @property
-    def has_pgespresso(self):
-        """
-        Returns true if the `pgespresso` extension is available
-        """
-        try:
-            # pg_extension is only available from Postgres 9.1+
-            if self.server_version < 90100:
-                return False
-            cur = self._cursor()
-            cur.execute("SELECT count(*) FROM pg_extension "
-                        "WHERE extname = 'pgespresso'")
-            q_result = cur.fetchone()[0]
-            return q_result > 0
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving pgespresso information: %s",
-                          force_str(e).strip())
-            return None
-
-    @property
-    def is_in_recovery(self):
-        """
-        Returns true if PostgreSQL server is in recovery mode (hot standby)
-        """
-        try:
-            # pg_is_in_recovery is only available from Postgres 9.0+
-            if self.server_version < 90000:
-                return False
-            cur = self._cursor()
-            cur.execute("SELECT pg_is_in_recovery()")
-            return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error calling pg_is_in_recovery() function: %s",
-                          force_str(e).strip())
+        except (MysqlInterfaceError, MysqlException) as e:
+            _logger.debug("Error retrieving MySQL version: {}".format(force_str(e).strip()))
             return None
 
     @property
@@ -323,140 +268,127 @@ class MySQLConnection(MySQL):
             cur.execute('SELECT usesuper FROM pg_user '
                         'WHERE usename = CURRENT_USER')
             return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error calling is_superuser() function: %s",
-                          force_str(e).strip())
+        except (MysqlInterfaceError, MysqlException) as e:
+            _logger.debug("Error calling is_superuser() function: %s".format(force_str(e).strip()))
             return None
 
     @property
     def has_backup_privileges(self):
         """
-        Returns true if current user is superuser or, for PostgreSQL 10
-        or above, is a standard user that has grants to read server
-        settings and to execute all the functions needed for
-        exclusive/concurrent backup control and WAL control.
+        Returns true if current user has efficient privileges,include below:
+        super :
+        processlist:
+        replicate client:
+        replicate slave :
         """
-        # pg_monitor / pg_read_all_settings only available from v10
-        if self.server_version < 100000:
-            return self.is_superuser
-
-        backup_check_query = """
+        privileges_info = """
         SELECT
-          usesuper
-          OR
-          (
-            userepl
-            AND
-            (
-              pg_has_role(CURRENT_USER, 'pg_monitor', 'MEMBER')
-              OR
-              (
-                pg_has_role(CURRENT_USER, 'pg_read_all_settings', 'MEMBER')
-                AND pg_has_role(CURRENT_USER, 'pg_read_all_stats', 'MEMBER')
+        concat(Select_priv
+              ,Insert_priv
+              ,Update_priv
+              ,Delete_priv
+              ,Create_priv
+              ,Drop_priv
+              ,Reload_priv
+              ,Shutdown_priv
+              ,Process_priv
+              ,File_priv
+              ,Grant_priv
+              ,References_priv
+              ,Index_priv
+              ,Alter_priv
+              ,Show_db_priv
+              ,Super_priv
+              ,Lock_tables_priv
+              ,Execute_priv
+              ,Repl_slave_priv
+              ,Repl_client_priv
+              ,Create_view_priv
+              ,Show_view_priv
+              ,Create_routine_priv
+              ,Alter_routine_priv
+              ,Create_user_priv
+              ,Event_priv
+              ,Trigger_priv
               )
-            )
-            AND has_function_privilege(
-              CURRENT_USER, 'pg_start_backup(text,bool,bool)', 'EXECUTE')
-            AND
-            (
-              has_function_privilege(
-                CURRENT_USER, 'pg_stop_backup()', 'EXECUTE')
-              OR has_function_privilege(
-                CURRENT_USER, 'pg_stop_backup(bool,bool)', 'EXECUTE')
-            )
-            AND has_function_privilege(
-              CURRENT_USER, 'pg_switch_wal()', 'EXECUTE')
-            AND has_function_privilege(
-              CURRENT_USER, 'pg_create_restore_point(text)', 'EXECUTE')
-          )
-        FROM
-          pg_user
-        WHERE
-          usename = CURRENT_USER
+        FROM mysql.user
+        WHERE user = CURRENT_USER
+          AND host = CURRENT_HOST 
         """
         try:
             cur = self._cursor()
-            cur.execute(backup_check_query)
+            cur.execute(privileges_info)
             return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error checking privileges for functions "
-                          "needed for backups: %s",
-                          force_str(e).strip())
+        except (MysqlInterfaceError, MysqlException) as e:
+            _logger.debug("Error checking privileges for functions needed for backups: {}".format(force_str(e).strip()))
             return None
 
     @property
-    def current_xlog_info(self):
+    def current_binlog_info(self):
         """
-        Get detailed information about the current WAL position in PostgreSQL.
+        Get detailed information about the current Binlog position in MySQL.
 
         This method returns a dictionary containing the following data:
 
-         * location
          * file_name
-         * file_offset
-         * timestamp
+         * position
+         * gtid
 
-        When executed on a standby server file_name and file_offset are always
-        None
-
-        :rtype: psycopg2.extras.DictRow
+        :rtype: dict
         """
         try:
-            cur = self._cursor(cursor_factory=DictCursor)
-            if not self.is_in_recovery:
-                cur.execute(
-                    "SELECT location, "
-                    "({pg_walfile_name_offset}(location)).*, "
-                    "CURRENT_TIMESTAMP AS timestamp "
-                    "FROM {pg_current_wal_lsn}() AS location"
-                    .format(**self.name_map))
-                return cur.fetchone()
-            else:
-                cur.execute(
-                    "SELECT location, "
-                    "NULL AS file_name, "
-                    "NULL AS file_offset, "
-                    "CURRENT_TIMESTAMP AS timestamp "
-                    "FROM {pg_last_wal_replay_lsn}() AS location"
-                    .format(**self.name_map))
-                return cur.fetchone()
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving current xlog "
-                          "detailed information: %s",
-                          force_str(e).strip())
+            cur = self._cursor()
+            cur.execute("SHOW MASTER STATUS;")
+            return cur.fetchone()
+        except (MysqlInterfaceError, MysqlException) as e:
+            _logger.debug("Error retrieving current binlog detailed information: {}".format(force_str(e).strip()))
         return None
 
     @property
-    def current_xlog_file_name(self):
+    def current_binlog_file_name(self):
         """
-        Get current WAL file from PostgreSQL
+        Get current WAL file from MySQL
 
-        :return str: current WAL file in PostgreSQL
+        :return str: current WAL file in MySQL
         """
-        current_xlog_info = self.current_xlog_info
-        if current_xlog_info is not None:
-            return current_xlog_info['file_name']
+        current_binlog_info = self.current_binlog_info
+        if current_binlog_info is not None:
+            return current_binlog_info['file']
         return None
 
     @property
-    def xlog_segment_size(self):
+    def current_binlog_position(self):
         """
-        Retrieve the size of one WAL file.
+        Get current WAL location from MySQL
 
-        In PostgreSQL 11, users will be able to change the WAL size
-        at runtime. Up to PostgreSQL 10, included, the WAL size can be changed
-        at compile time
+        :return str: current WAL location in MySQL
+        """
+        current_binlog_info = self.current_binlog_info
+        if current_binlog_info is not None:
+            return current_binlog_info['position']
+        return None
+
+    @property
+    def current_gtid(self):
+        """
+        Get current WAL location from MySQL
+
+        :return str: current WAL location in MySQL
+        """
+        current_binlog_info = self.current_binlog_info
+        if current_binlog_info is not None:
+            return current_binlog_info['gtid']
+        return None
+
+    @property
+    def binlog_file_size(self):
+        """
+        Retrieve the size of one Binlog file.
 
         :return: The wal size (In bytes)
         """
-
-        # Prior to PostgreSQL 8.4, the wal segment size was not configurable,
-        # even in compilation
-        if self.server_version < 80400:
-            return DEFAULT_XLOG_SEG_SIZE
-
         try:
-            cur = self._cursor(cursor_factory=DictCursor)
+            cur = self._cursor()
             # We can't use the `get_setting` method here, because it
             # use `SHOW`, returning an human readable value such as "16MB",
             # while we prefer a raw value such as 16777216.
@@ -466,7 +398,7 @@ class MySQLConnection(MySQL):
             result = cur.fetchone()
             wal_segment_size = int(result[0])
 
-            # Prior to PostgreSQL 11, the wal segment size is returned in
+            # Prior to MySQL 11, the wal segment size is returned in
             # blocks
             if self.server_version < 110000:
                 cur.execute("SELECT setting "
@@ -485,21 +417,9 @@ class MySQLConnection(MySQL):
             return None
 
     @property
-    def current_xlog_location(self):
-        """
-        Get current WAL location from PostgreSQL
-
-        :return str: current WAL location in PostgreSQL
-        """
-        current_xlog_info = self.current_xlog_info
-        if current_xlog_info is not None:
-            return current_xlog_info['location']
-        return None
-
-    @property
     def current_size(self):
         """
-        Returns the total size of the PostgreSQL server
+        Returns the total size of the MySQL server
         (requires superuser or pg_read_all_stats)
         """
         if not self.has_backup_privileges:
@@ -512,14 +432,14 @@ class MySQLConnection(MySQL):
                 "FROM pg_tablespace")
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL total size: %s",
+            _logger.debug("Error retrieving MySQL total size: %s",
                           force_str(e).strip())
             return None
 
     @property
     def archive_timeout(self):
         """
-        Retrieve the archive_timeout setting in PostgreSQL
+        Retrieve the archive_timeout setting in MySQL
 
         :return: The archive timeout (in seconds)
         """
@@ -543,7 +463,7 @@ class MySQLConnection(MySQL):
     @property
     def checkpoint_timeout(self):
         """
-        Retrieve the checkpoint_timeout setting in PostgreSQL
+        Retrieve the checkpoint_timeout setting in MySQL
 
         :return: The checkpoint timeout (in seconds)
         """
@@ -607,17 +527,17 @@ class MySQLConnection(MySQL):
 
     def fetch_remote_status(self):
         """
-        Get the status of the PostgreSQL server
+        Get the status of the MySQL server
 
         This method does not raise any exception in case of errors,
         but set the missing values to None in the resulting dictionary.
 
         :rtype: dict[str, None|str]
         """
-        # PostgreSQL settings to get from the server (requiring superuser)
+        # MySQL settings to get from the server (requiring superuser)
         pg_superuser_settings = [
             'data_directory']
-        # PostgreSQL settings to get from the server
+        # MySQL settings to get from the server
         pg_settings = []
         pg_query_keys = [
             'server_txt_version',
@@ -697,7 +617,7 @@ class MySQLConnection(MySQL):
             if self.server_version >= 90600:
                 result["postgres_systemid"] = self.get_systemid()
         except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.warning("Error retrieving PostgreSQL status: %s",
+            _logger.warning("Error retrieving MySQL status: %s",
                             force_str(e).strip())
         return result
 
@@ -712,7 +632,7 @@ class MySQLConnection(MySQL):
             cur.execute('SHOW "%s"' % name.replace('"', '""'))
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL setting '%s': %s",
+            _logger.debug("Error retrieving MySQL setting '%s': %s",
                           name.replace('"', '""'), force_str(e).strip())
             return None
 
@@ -735,7 +655,7 @@ class MySQLConnection(MySQL):
                 self.configuration_files[cname] = cpath
 
             # Retrieve additional configuration files
-            # If PostgreSQL is older than 8.4 disable this check
+            # If MySQL is older than 8.4 disable this check
             if self.server_version >= 80400:
                 cur.execute(
                     "SELECT DISTINCT sourcefile AS included_file "
@@ -752,7 +672,7 @@ class MySQLConnection(MySQL):
                     self.configuration_files['included_files'] = included_files
 
         except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug("Error retrieving PostgreSQL configuration files "
+            _logger.debug("Error retrieving MySQL configuration files "
                           "location: %s", force_str(e).strip())
             self.configuration_files = {}
 
@@ -760,7 +680,7 @@ class MySQLConnection(MySQL):
 
     def start_exclusive_backup(self, label):
         """
-        Calls pg_start_backup() on the PostgreSQL server
+        Calls pg_start_backup() on the MySQL server
 
         This method returns a dictionary containing the following data:
 
@@ -776,7 +696,7 @@ class MySQLConnection(MySQL):
             conn = self.connect()
 
             # Rollback to release the transaction, as the pg_start_backup
-            # invocation can last up to PostgreSQL's checkpoint_timeout
+            # invocation can last up to MySQL's checkpoint_timeout
             conn.rollback()
 
             # Start an exclusive backup
@@ -787,7 +707,7 @@ class MySQLConnection(MySQL):
                     "({pg_walfile_name_offset}(location)).*, "
                     "now() AS timestamp "
                     "FROM pg_start_backup(%s) AS location"
-                    .format(**self.name_map),
+                        .format(**self.name_map),
                     (label,))
             else:
                 cur.execute(
@@ -795,7 +715,7 @@ class MySQLConnection(MySQL):
                     "({pg_walfile_name_offset}(location)).*, "
                     "now() AS timestamp "
                     "FROM pg_start_backup(%s,%s) AS location"
-                    .format(**self.name_map),
+                        .format(**self.name_map),
                     (label, self.immediate_checkpoint))
 
             start_row = cur.fetchone()
@@ -812,7 +732,7 @@ class MySQLConnection(MySQL):
 
     def start_concurrent_backup(self, label):
         """
-        Calls pg_start_backup on the PostgreSQL server using the
+        Calls pg_start_backup on the MySQL server using the
         API introduced with version 9.6
 
         This method returns a dictionary containing the following data:
@@ -828,7 +748,7 @@ class MySQLConnection(MySQL):
             conn = self.connect()
 
             # Rollback to release the transaction, as the pg_start_backup
-            # invocation can last up to PostgreSQL's checkpoint_timeout
+            # invocation can last up to MySQL's checkpoint_timeout
             conn.rollback()
 
             # Start the backup using the api introduced in postgres 9.6
@@ -854,7 +774,7 @@ class MySQLConnection(MySQL):
 
     def stop_exclusive_backup(self):
         """
-        Calls pg_stop_backup() on the PostgreSQL server
+        Calls pg_stop_backup() on the MySQL server
 
         This method returns a dictionary containing the following data:
 
@@ -879,7 +799,7 @@ class MySQLConnection(MySQL):
                 "({pg_walfile_name_offset}(location)).*, "
                 "now() AS timestamp "
                 "FROM pg_stop_backup() AS location"
-                .format(**self.name_map)
+                    .format(**self.name_map)
             )
 
             return cur.fetchone()
@@ -890,11 +810,11 @@ class MySQLConnection(MySQL):
             raise PostgresException(
                 'Cannot terminate exclusive backup. '
                 'You might have to manually execute pg_stop_backup '
-                'on your PostgreSQL server')
+                'on your MySQL server')
 
     def stop_concurrent_backup(self):
         """
-        Calls pg_stop_backup on the PostgreSQL server using the
+        Calls pg_stop_backup on the MySQL server using the
         API introduced with version 9.6
 
         This method returns a dictionary containing the following data:
@@ -948,7 +868,7 @@ class MySQLConnection(MySQL):
 
             # Rollback to release the transaction,
             # as the pgespresso_start_backup invocation can last
-            # up to PostgreSQL's checkpoint_timeout
+            # up to MySQL's checkpoint_timeout
             conn.rollback()
 
             # Start the concurrent backup using pgespresso
@@ -999,12 +919,12 @@ class MySQLConnection(MySQL):
             raise PostgresException(
                 '%s\n'
                 'HINT: You might have to manually execute '
-                'pgespresso_abort_backup() on your PostgreSQL '
+                'pgespresso_abort_backup() on your MySQL '
                 'server' % msg)
 
-    def switch_wal(self):
+    def flush_binlog(self):
         """
-        Execute a pg_switch_wal()
+        Execute a FLUSH BINARY LOGS ;
 
         To be SURE of the switch of a xlog, we collect the xlogfile name
         before and after the switch.
@@ -1021,53 +941,13 @@ class MySQLConnection(MySQL):
             # Requires superuser privilege
             if not self.has_backup_privileges:
                 raise BackupFunctionsAccessRequired()
-
-            # If this server is in recovery there is nothing to do
-            if self.is_in_recovery:
-                raise PostgresIsInRecovery()
-
             cur = conn.cursor()
-            # Collect the xlog file name before the switch
-            cur.execute('SELECT {pg_walfile_name}('
-                        '{pg_current_wal_insert_lsn}())'
-                        .format(**self.name_map))
-            pre_switch = cur.fetchone()[0]
-            # Switch
-            cur.execute('SELECT {pg_walfile_name}({pg_switch_wal}())'
-                        .format(**self.name_map))
-            # Collect the xlog file name after the switch
-            cur.execute('SELECT {pg_walfile_name}('
-                        '{pg_current_wal_insert_lsn}())'
-                        .format(**self.name_map))
-            post_switch = cur.fetchone()[0]
-            if pre_switch < post_switch:
-                return pre_switch
-            else:
-                return ''
+            cur.execute('FLUSH BINARY LOGS')
         except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug(
-                "Error issuing {pg_switch_wal}() command: %s"
-                .format(**self.name_map),
+            _logger.debug("Error issuing {pg_switch_wal}() command: %s"
+                    .format(**self.name_map),
                 force_str(e).strip())
             return None
-
-    def checkpoint(self):
-        """
-        Execute a checkpoint
-        """
-        try:
-            conn = self.connect()
-
-            # Requires superuser privilege
-            if not self.is_superuser:
-                raise PostgresSuperuserRequired()
-
-            cur = conn.cursor()
-            cur.execute("CHECKPOINT")
-        except (PostgresConnectionError, psycopg2.Error) as e:
-            _logger.debug(
-                "Error issuing CHECKPOINT: %s",
-                force_str(e).strip())
 
     def get_replication_stats(self, client_type=STANDBY):
         """
@@ -1082,7 +962,7 @@ class MySQLConnection(MySQL):
             # pg_stat_replication is a system view that contains one
             # row per WAL sender process with information about the
             # replication status of a standby server. It has been
-            # introduced in PostgreSQL 9.1. Current fields are:
+            # introduced in MySQL 9.1. Current fields are:
             #
             # - pid (procpid in 9.1)
             # - usesysid
@@ -1116,83 +996,83 @@ class MySQLConnection(MySQL):
                 where_clauses += ["(rs.slot_type IS NULL OR "
                                   "rs.slot_type = 'physical')"]
             elif self.server_version >= 90500:
-                # PostgreSQL 9.5/9.6
+                # MySQL 9.5/9.6
                 what = "pid, " \
-                    "usesysid, " \
-                    "usename, " \
-                    "application_name, " \
-                    "client_addr, " \
-                    "client_hostname, " \
-                    "client_port, " \
-                    "backend_start, " \
-                    "backend_xmin, " \
-                    "state, " \
-                    "sent_location AS sent_lsn, " \
-                    "write_location AS write_lsn, " \
-                    "flush_location AS flush_lsn, " \
-                    "replay_location AS replay_lsn, " \
-                    "sync_priority, " \
-                    "sync_state, " \
-                    "rs.slot_name"
+                       "usesysid, " \
+                       "usename, " \
+                       "application_name, " \
+                       "client_addr, " \
+                       "client_hostname, " \
+                       "client_port, " \
+                       "backend_start, " \
+                       "backend_xmin, " \
+                       "state, " \
+                       "sent_location AS sent_lsn, " \
+                       "write_location AS write_lsn, " \
+                       "flush_location AS flush_lsn, " \
+                       "replay_location AS replay_lsn, " \
+                       "sync_priority, " \
+                       "sync_state, " \
+                       "rs.slot_name"
                 # Look for replication slot name
                 from_repslot = "LEFT JOIN pg_replication_slots rs " \
                                "ON (r.pid = rs.active_pid) "
                 where_clauses += ["(rs.slot_type IS NULL OR "
                                   "rs.slot_type = 'physical')"]
             elif self.server_version >= 90400:
-                # PostgreSQL 9.4
+                # MySQL 9.4
                 what = "pid, " \
-                    "usesysid, " \
-                    "usename, " \
-                    "application_name, " \
-                    "client_addr, " \
-                    "client_hostname, " \
-                    "client_port, " \
-                    "backend_start, " \
-                    "backend_xmin, " \
-                    "state, " \
-                    "sent_location AS sent_lsn, " \
-                    "write_location AS write_lsn, " \
-                    "flush_location AS flush_lsn, " \
-                    "replay_location AS replay_lsn, " \
-                    "sync_priority, " \
-                    "sync_state"
+                       "usesysid, " \
+                       "usename, " \
+                       "application_name, " \
+                       "client_addr, " \
+                       "client_hostname, " \
+                       "client_port, " \
+                       "backend_start, " \
+                       "backend_xmin, " \
+                       "state, " \
+                       "sent_location AS sent_lsn, " \
+                       "write_location AS write_lsn, " \
+                       "flush_location AS flush_lsn, " \
+                       "replay_location AS replay_lsn, " \
+                       "sync_priority, " \
+                       "sync_state"
             elif self.server_version >= 90200:
-                # PostgreSQL 9.2/9.3
+                # MySQL 9.2/9.3
                 what = "pid, " \
-                    "usesysid, " \
-                    "usename, " \
-                    "application_name, " \
-                    "client_addr, " \
-                    "client_hostname, " \
-                    "client_port, " \
-                    "backend_start, " \
-                    "CAST (NULL AS xid) AS backend_xmin, " \
-                    "state, " \
-                    "sent_location AS sent_lsn, " \
-                    "write_location AS write_lsn, " \
-                    "flush_location AS flush_lsn, " \
-                    "replay_location AS replay_lsn, " \
-                    "sync_priority, " \
-                    "sync_state"
+                       "usesysid, " \
+                       "usename, " \
+                       "application_name, " \
+                       "client_addr, " \
+                       "client_hostname, " \
+                       "client_port, " \
+                       "backend_start, " \
+                       "CAST (NULL AS xid) AS backend_xmin, " \
+                       "state, " \
+                       "sent_location AS sent_lsn, " \
+                       "write_location AS write_lsn, " \
+                       "flush_location AS flush_lsn, " \
+                       "replay_location AS replay_lsn, " \
+                       "sync_priority, " \
+                       "sync_state"
             else:
-                # PostgreSQL 9.1
+                # MySQL 9.1
                 what = "procpid AS pid, " \
-                    "usesysid, " \
-                    "usename, " \
-                    "application_name, " \
-                    "client_addr, " \
-                    "client_hostname, " \
-                    "client_port, " \
-                    "backend_start, " \
-                    "CAST (NULL AS xid) AS backend_xmin, " \
-                    "state, " \
-                    "sent_location AS sent_lsn, " \
-                    "write_location AS write_lsn, " \
-                    "flush_location AS flush_lsn, " \
-                    "replay_location AS replay_lsn, " \
-                    "sync_priority, " \
-                    "sync_state"
+                       "usesysid, " \
+                       "usename, " \
+                       "application_name, " \
+                       "client_addr, " \
+                       "client_hostname, " \
+                       "client_port, " \
+                       "backend_start, " \
+                       "CAST (NULL AS xid) AS backend_xmin, " \
+                       "state, " \
+                       "sent_location AS sent_lsn, " \
+                       "write_location AS write_lsn, " \
+                       "flush_location AS flush_lsn, " \
+                       "replay_location AS replay_lsn, " \
+                       "sync_priority, " \
+                       "sync_state"
 
             # Streaming client
             if client_type == self.STANDBY:
@@ -1233,7 +1113,7 @@ class MySQLConnection(MySQL):
 
     def get_replication_slot(self, slot_name):
         """
-        Retrieve from the PostgreSQL server a physical replication slot
+        Retrieve from the MySQL server a physical replication slot
         with a specific slot_name.
 
         This method returns a dictionary containing the following data:
@@ -1247,7 +1127,7 @@ class MySQLConnection(MySQL):
         """
         if self.server_version < 90400:
             # Raise exception if replication slot are not supported
-            # by PostgreSQL version
+            # by MySQL version
             raise PostgresUnsupportedFeature('9.4')
         else:
             cur = self._cursor(cursor_factory=NamedTupleCursor)
@@ -1264,58 +1144,3 @@ class MySQLConnection(MySQL):
                 _logger.debug("Error retrieving replication_slots: %s",
                               force_str(e).strip())
                 raise
-
-    def get_synchronous_standby_names(self):
-        """
-        Retrieve the list of named synchronous standby servers from PostgreSQL
-
-        This method returns a list of names
-
-        :return list: synchronous standby names
-        """
-        if self.server_version < 90100:
-            # Raise exception if synchronous replication is not supported
-            raise PostgresUnsupportedFeature('9.1')
-        else:
-            synchronous_standby_names = (
-                self.get_setting('synchronous_standby_names'))
-            # Return empty list if not defined
-            if synchronous_standby_names is None:
-                return []
-            # Normalise the list of sync standby names
-            # On PostgreSQL 9.6 it is possible to specify the number of
-            # required synchronous standby using this format:
-            # n (name1, name2, ... nameN).
-            # We only need the name list, so we discard everything else.
-
-            # The name list starts after the first parenthesis or at pos 0
-            names_start = synchronous_standby_names.find('(') + 1
-            names_end = synchronous_standby_names.rfind(')')
-            if names_end < 0:
-                names_end = len(synchronous_standby_names)
-            names_list = synchronous_standby_names[names_start:names_end]
-            # We can blindly strip double quotes because PostgreSQL enforces
-            # the format of the synchronous_standby_names content
-            return [x.strip().strip('"') for x in names_list.split(',')]
-
-    @property
-    def name_map(self):
-        """
-        Return a map with function and directory names according to the current
-        PostgreSQL version.
-
-        Each entry has the `current` name as key and the name for the specific
-        version as value.
-
-        :rtype: dict[str]
-        """
-
-        # Avoid raising an error if the connection is not available
-        try:
-            server_version = self.server_version
-        except PostgresConnectionError:
-            _logger.debug('Impossible to detect the PostgreSQL version, '
-                          'name_map will return names from latest version')
-            server_version = None
-
-        return function_name_map(server_version)
