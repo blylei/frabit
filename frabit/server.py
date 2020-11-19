@@ -43,7 +43,7 @@ from frabit.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
 from frabit.lockfile import (ServerBackupIdLock, ServerBackupLock,
                              ServerBackupSyncLock, ServerCronLock,
                              ServerWalArchiveLock, ServerWalReceiveLock,
-                             ServerWalSyncLock, ServerXLOGDBLock)
+                             ServerBinlogSyncLock, ServerXLOGDBLock)
 from frabit.mysql import MySQLConnection, StreamingConnection
 from frabit.process import ProcessManager
 from frabit.remote_status import RemoteStatusMixin
@@ -2838,8 +2838,8 @@ class Server(RemoteStatusMixin):
             # If cannot acquire the lock, another synchronisation process
             # is running, so we give up.
             try:
-                with ServerWalSyncLock(self.config.frabit_lock_directory,
-                                       self.config.name,):
+                with ServerBinlogSyncLock(self.config.frabit_lock_directory,
+                                          self.config.name, ):
                     output.info("Started copy of WAL files for server %s",
                                 self.config.name)
             except LockFileBusy:
@@ -3258,8 +3258,8 @@ class Server(RemoteStatusMixin):
         # Try to acquire the sync-wal lock if the lock is not available,
         # abort the sync-wal operation
         try:
-            with ServerWalSyncLock(self.config.frabit_lock_directory,
-                                   self.config.name, ):
+            with ServerBinlogSyncLock(self.config.frabit_lock_directory,
+                                      self.config.name, ):
                 try:
                     # Need to load data from status files: primary.info
                     # and sync-wals.info

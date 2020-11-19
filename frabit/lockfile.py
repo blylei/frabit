@@ -12,14 +12,12 @@ import fcntl
 import os
 import re
 
-from frabit.exceptions import (LockFileBusy, LockFileParsingError,
-                               LockFilePermissionDenied)
+from frabit.exceptions import (LockFileBusy, LockFileParsingError, LockFilePermissionDenied)
 
 
-class LockFile(object):
+class LockFile:
     """
-    Ensures that there is only one process which is running against a
-    specified LockFile.
+    Ensures that there is only one process which is running against a specified LockFile.
     It supports the Context Manager interface, allowing the use in with
     statements.
 
@@ -61,8 +59,7 @@ class LockFile(object):
     @classmethod
     def build_if_matches(cls, path):
         """
-        Factory method that creates a lock instance if the path matches
-        the lock filename created by the actual class
+        Factory method that creates a lock instance if the path matches  the lock filename created by the actual class
 
         :param path: the full path of a LockFile
         :return:
@@ -89,10 +86,8 @@ class LockFile(object):
         """
         Creates and holds on to the lock file.
 
-        When raise_if_fail, a LockFileBusy is raised if
-        the lock is held by someone else and a LockFilePermissionDenied is
-        raised when the user executing barman have insufficient rights for
-        the creation of a LockFile.
+        When raise_if_fail, a LockFileBusy is raised if the lock is held by someone else and a LockFilePermissionDenied
+        is raised when the user executing barman have insufficient rights for the creation of a LockFile.
 
         Returns True if lock has been successfully acquired, False otherwise.
 
@@ -105,8 +100,7 @@ class LockFile(object):
             return True
         fd = None
         # method arguments take precedence on class parameters
-        raise_if_fail = raise_if_fail \
-            if raise_if_fail is not None else self.raise_if_fail
+        raise_if_fail = raise_if_fail if raise_if_fail is not None else self.raise_if_fail
         wait = wait if wait is not None else self.wait
         try:
             # 384 is 0600 in octal, 'rw-------'
@@ -118,7 +112,8 @@ class LockFile(object):
             if update_pid:
                 # Once locked, replace the content of the file
                 os.lseek(fd, 0, os.SEEK_SET)
-                os.write(fd, ("%s\n" % os.getpid()).encode('ascii'))
+                pid = os.getpid()
+                os.write(fd, "{}\n".format(pid))
                 # Truncate the file at the current position
                 os.ftruncate(fd, os.lseek(fd, 0, os.SEEK_CUR))
             self.fd = fd
@@ -180,8 +175,7 @@ class LockFile(object):
         except LockFileBusy:
             try:
                 # Read the lock content and parse the PID
-                # NOTE: We cannot read it in the self.acquire method to avoid
-                # reading the previous locker PID
+                # NOTE: We cannot read it in the self.acquire method to avoid reading the previous locker PID
                 with open(self.filename, 'r') as file_object:
                     return int(file_object.readline().strip())
             except ValueError as e:
@@ -201,8 +195,7 @@ class GlobalCronLock(LockFile):
 
     def __init__(self, lock_directory):
         super(GlobalCronLock, self).__init__(
-            os.path.join(lock_directory, '.cron.lock'),
-            raise_if_fail=True)
+            os.path.join(lock_directory, '.cron.lock'), raise_if_fail=True)
 
 
 class ServerBackupLock(LockFile):
@@ -215,7 +208,7 @@ class ServerBackupLock(LockFile):
 
     def __init__(self, lock_directory, server_name):
         super(ServerBackupLock, self).__init__(
-            os.path.join(lock_directory, '.%s-backup.lock' % server_name),
+            os.path.join(lock_directory, '.{}-backup.lock'.format(server_name)),
             raise_if_fail=True)
 
 
@@ -229,7 +222,7 @@ class ServerCronLock(LockFile):
 
     def __init__(self, lock_directory, server_name):
         super(ServerCronLock, self).__init__(
-            os.path.join(lock_directory, '.%s-cron.lock' % server_name),
+            os.path.join(lock_directory, '.{}-cron.lock'.format(server_name)),
             raise_if_fail=True, wait=False)
 
 
@@ -247,22 +240,6 @@ class ServerWalArchiveLock(LockFile):
             raise_if_fail=True, wait=False)
 
 
-class ServerWalReceiveLock(LockFile):
-    """
-    This lock protects a server from multiple executions of receive-wal command
-
-    Creates a '.<SERVER>-receive-wal.lock' lock file under
-    the given lock_directory for the named SERVER.
-    """
-    # TODO: Implement on the other LockFile subclasses
-    LOCK_PATTERN = re.compile(r'\.(?P<server_name>.+)-receive-wal\.lock')
-
-    def __init__(self, lock_directory, server_name):
-        super(ServerWalReceiveLock, self).__init__(
-            os.path.join(lock_directory, '.%s-receive-wal.lock' % server_name),
-            raise_if_fail=True, wait=False)
-
-
 class ServerBackupIdLock(LockFile):
     """
     This lock protects from changing a backup that is in use.
@@ -273,9 +250,8 @@ class ServerBackupIdLock(LockFile):
 
     def __init__(self, lock_directory, server_name, backup_id):
         super(ServerBackupIdLock, self).__init__(
-            os.path.join(lock_directory, '.%s-%s.lock' % (
-                server_name, backup_id)),
-            raise_if_fail=True, wait=False)
+            os.path.join(lock_directory, '.{server}-{backup}.lock'.format(
+                server=server_name, backup=backup_id)), raise_if_fail=True, wait=False)
 
 
 class ServerBackupSyncLock(LockFile):
@@ -283,26 +259,23 @@ class ServerBackupSyncLock(LockFile):
     This lock protects from multiple executions of the sync command on the same
     backup.
 
-    Creates a '.<SERVER>-<BACKUP>-sync-backup.lock' lock file under the given
-    lock_directory for a BACKUP of a SERVER.
+    Creates a '.<SERVER>-<BACKUP>-sync-backup.lock' lock file under the given lock_directory for a BACKUP of a SERVER.
     """
 
     def __init__(self, lock_directory, server_name, backup_id):
         super(ServerBackupSyncLock, self).__init__(
-            os.path.join(lock_directory, '.%s-%s-sync-backup.lock' % (
-                server_name, backup_id)),
-            raise_if_fail=True, wait=False)
+            os.path.join(lock_directory, '.{server}-{backup}-sync-backup.lock'.format(
+                server=server_name, backup=backup_id)), raise_if_fail=True, wait=False)
 
 
-class ServerWalSyncLock(LockFile):
+class ServerBinlogSyncLock(LockFile):
     """
-    This lock protects from multiple executions of the sync-wal command
+    This lock protects from multiple executions of the sync-binlog command
 
-    Creates a '.<SERVER>-sync-wal.lock' lock file under the given
-    lock_directory for the named SERVER.
+    Creates a '.<SERVER>-sync-binlog.lock' lock file under the given lock_directory for the named SERVER.
     """
 
     def __init__(self, lock_directory, server_name):
-        super(ServerWalSyncLock, self).__init__(
-            os.path.join(lock_directory, '.%s-sync-wal.lock' % server_name),
+        super(ServerBinlogSyncLock, self).__init__(
+            os.path.join(lock_directory, '.{}-sync-binlog.lock'.format(server_name)),
             raise_if_fail=True, wait=True)
