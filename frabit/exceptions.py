@@ -92,9 +92,15 @@ class BackupException(FrabitException):
     """
 
 
-class BackupInefficientPrivilege(MysqlException):
+class BackupInefficientPrivilege(BackupException):
     """
     Superuser or access to backup functions is required
+    """
+
+
+class BackupInfoBadInitialisation(BackupException):
+    """
+    Exception for a bad initialization error
     """
 
 
@@ -131,12 +137,6 @@ class TimeoutError(CommandException):
 class UnknownBackupIdException(BackupException):
     """
     The searched backup_id doesn't exists
-    """
-
-
-class BackupInfoBadInitialisation(BackupException):
-    """
-    Exception for a bad initialization error
     """
 
 
