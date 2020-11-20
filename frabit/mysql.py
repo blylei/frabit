@@ -225,6 +225,7 @@ class MySQLConnection(MySQL):
     """
     This class represents a standard client connection to a MySQL server.
     """
+    SERVER_TYPE = 'source'
 
     def __init__(self, conninfo):
         """
@@ -253,7 +254,9 @@ class MySQLConnection(MySQL):
         try:
             cur = self._cursor()
             cur.execute("SELECT version()")
-            return cur.fetchone()[0].split()[1]
+            info = cur.fetchall()[0][0].split("-")[0]
+            version = {"major": info.split(".")[0], "minor": info.split(".")[1], "patch": info.split(".")[2]}
+            return version
         except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error retrieving MySQL version: {}".format(force_str(e).strip()))
             return None
@@ -452,9 +455,7 @@ class MySQLConnection(MySQL):
             cur = conn.cursor()
             cur.execute('FLUSH BINARY LOGS')
         except (MysqlInterfaceError, MysqlException) as e:
-            _logger.debug("Error issuing {pg_switch_wal}() command: %s"
-                    .format(**self.name_map),
-                force_str(e).strip())
+            _logger.debug("Error issuing (FLUSH BINARY LOGS) command")
             return None
 
     def get_replication_stats(self):
@@ -534,6 +535,5 @@ class MySQLConnection(MySQL):
             # Generate a list of standby objects
             return cur.fetchall()
         except (MysqlInterfaceError, MysqlException) as e:
-            _logger.debug("Error retrieving status of standby servers: %s",
-                          force_str(e).strip())
+            _logger.debug("Error retrieving status of replica servers: {}".format(force_str(e).strip()))
             return None
