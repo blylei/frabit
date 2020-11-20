@@ -92,6 +92,12 @@ class BackupException(FrabitException):
     """
 
 
+class BackupInefficientPrivilege(MysqlException):
+    """
+    Superuser or access to backup functions is required
+    """
+
+
 class HookScriptException(FrabitException):
     """
     Base exception for all the errors related to Hook Script execution.
@@ -246,12 +252,6 @@ class BinlogHasPurged(MysqlException):
             return force_str(self.args[0]).splitlines()[0].strip()
         else:
             return ''
-
-
-class BackupFunctionsAccessRequired(MysqlException):
-    """
-    Superuser or access to backup functions is required
-    """
 
 
 class AbortedRetryHookScript(HookScriptException):
