@@ -31,7 +31,8 @@ from frabit.exceptions import (ConninfoException,
                                MysqlNotSupportedError,
                                MysqlProgrammingError,
                                MysqlConnectError,
-                               MysqlInterfaceError
+                               MysqlInterfaceError,
+                               BackupInefficientPrivilege
                                )
 from frabit.infofile import Tablespace
 from frabit.remote_status import RemoteStatusMixin
@@ -146,8 +147,7 @@ class MySQL:
             initial_status = self._conn.status
             cursor = self._conn.cursor()
             cursor.execute(self.CHECK_QUERY)
-            # Rollback if initial status was IDLE because the CHECK QUERY
-            # has started a new transaction.
+            # Rollback if initial status was IDLE because the CHECK QUERY has started a new transaction.
             if initial_status == STATUS_READY:
                 self._conn.rollback()
         except connector.DatabaseError:
@@ -259,20 +259,6 @@ class MySQLConnection(MySQL):
             return None
 
     @property
-    def is_superuser(self):
-        """
-        Returns true if current user has superuser privileges
-        """
-        try:
-            cur = self._cursor()
-            cur.execute('SELECT usesuper FROM pg_user '
-                        'WHERE usename = CURRENT_USER')
-            return cur.fetchone()[0]
-        except (MysqlInterfaceError, MysqlException) as e:
-            _logger.debug("Error calling is_superuser() function: %s".format(force_str(e).strip()))
-            return None
-
-    @property
     def has_backup_privileges(self):
         """
         Returns true if current user has efficient privileges,include below:
@@ -320,7 +306,7 @@ class MySQLConnection(MySQL):
             cur.execute(privileges_info)
             return cur.fetchone()[0]
         except (MysqlInterfaceError, MysqlException) as e:
-            _logger.debug("Error checking privileges for functions needed for backups: {}".format(force_str(e).strip()))
+            _logger.debug("Error checking privileges needed for backups: {}".format(force_str(e).strip()))
             return None
 
     @property
@@ -381,42 +367,6 @@ class MySQLConnection(MySQL):
         return None
 
     @property
-    def binlog_file_size(self):
-        """
-        Retrieve the size of one Binlog file.
-
-        :return: The wal size (In bytes)
-        """
-        try:
-            cur = self._cursor()
-            # We can't use the `get_setting` method here, because it
-            # use `SHOW`, returning an human readable value such as "16MB",
-            # while we prefer a raw value such as 16777216.
-            cur.execute("SELECT setting "
-                        "FROM pg_settings "
-                        "WHERE name='wal_segment_size'")
-            result = cur.fetchone()
-            wal_segment_size = int(result[0])
-
-            # Prior to MySQL 11, the wal segment size is returned in
-            # blocks
-            if self.server_version < 110000:
-                cur.execute("SELECT setting "
-                            "FROM pg_settings "
-                            "WHERE name='wal_block_size'")
-                result = cur.fetchone()
-                wal_block_size = int(result[0])
-
-                wal_segment_size *= wal_block_size
-
-            return wal_segment_size
-        except ValueError as e:
-            _logger.error("Error retrieving current xlog "
-                          "segment size: %s",
-                          force_str(e).strip())
-            return None
-
-    @property
     def current_size(self):
         """
         Returns the total size of the MySQL server
@@ -430,7 +380,7 @@ class MySQLConnection(MySQL):
                 "SELECT sum(pg_tablespace_size(oid)) "
                 "FROM pg_tablespace")
             return cur.fetchone()[0]
-        except (PostgresConnectionError, psycopg2.Error) as e:
+        except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error retrieving MySQL total size: %s",
                           force_str(e).strip())
             return None
@@ -451,7 +401,7 @@ class MySQLConnection(MySQL):
                 "WHERE name IN ('config_file', 'hba_file', 'ident_file')")
             for cname, cpath in cur.fetchall():
                 self.configuration_files[cname] = cpath
-        except (PostgresConnectionError, psycopg2.Error) as e:
+        except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error retrieving MySQL configuration files "
                           "location: %s", force_str(e).strip())
             self.configuration_files = {}
@@ -464,19 +414,16 @@ class MySQLConnection(MySQL):
 
         :rtype: str
         """
+        cur = self._cursor()
         if is_global:
-
-        if self.configuration_files:
-            return self.configuration_files
+            pass
         try:
-            self.configuration_files = {}
-            cur = self._cursor()
             cur.execute(
                 "SELECT name, setting FROM pg_settings "
                 "WHERE name IN ('config_file', 'hba_file', 'ident_file')")
             for cname, cpath in cur.fetchall():
                 self.configuration_files[cname] = cpath
-        except (PostgresConnectionError, psycopg2.Error) as e:
+        except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error retrieving MySQL configuration files "
                           "location: %s", force_str(e).strip())
             self.configuration_files = {}
@@ -501,10 +448,10 @@ class MySQLConnection(MySQL):
             conn = self.connect()
             # Requires superuser privilege
             if not self.has_backup_privileges:
-                raise BackupFunctionsAccessRequired()
+                raise BackupInefficientPrivilege()
             cur = conn.cursor()
             cur.execute('FLUSH BINARY LOGS')
-        except (PostgresConnectionError, psycopg2.Error) as e:
+        except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error issuing {pg_switch_wal}() command: %s"
                     .format(**self.name_map),
                 force_str(e).strip())
@@ -518,7 +465,7 @@ class MySQLConnection(MySQL):
             cur = self._cursor()
 
             if not self.has_backup_privileges:
-                raise BackupFunctionsAccessRequired()
+                raise BackupInefficientPrivilege()
 
             '''
             Slave_IO_State:
@@ -581,22 +528,12 @@ class MySQLConnection(MySQL):
             '''
             # Execute the query
             cur.execute(
-                "SELECT %s, "
-                "pg_is_in_recovery() AS is_in_recovery, "
-                "CASE WHEN pg_is_in_recovery() "
-                "  THEN {pg_last_wal_receive_lsn}() "
-                "  ELSE {pg_current_wal_lsn}() "
-                "END AS current_lsn "
-                "FROM pg_stat_replication r "
-                "%s"
-                "%s"
-                "ORDER BY sync_state DESC, sync_priority"
-                .format(**self.name_map)
-                % (what, from_repslot, where))
+                ""
+                .format())
 
             # Generate a list of standby objects
             return cur.fetchall()
-        except (PostgresConnectionError, psycopg2.Error) as e:
+        except (MysqlInterfaceError, MysqlException) as e:
             _logger.debug("Error retrieving status of standby servers: %s",
                           force_str(e).strip())
             return None
