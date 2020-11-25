@@ -178,7 +178,7 @@ class CheckOutputStrategy(CheckStrategy):
 
 class Server(RemoteStatusMixin):
     """
-    This class represents the PostgreSQL server to backup.
+    This class represents the MySQL server to backup.
     """
 
     XLOG_DB = "xlog.db"
