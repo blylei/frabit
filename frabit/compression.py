@@ -78,9 +78,7 @@ class CompressionManager(object):
         :param str filename: the path of the file to identify
         :rtype: barman.infofile.WalFileInfo
         """
-        return frabit.infofile.WalFileInfo.from_file(
-            filename,
-            self.unidentified_compression)
+        return frabit.infofile.WalFileInfo.from_file(filename, self.unidentified_compression)
 
 
 def identify_compression(filename):
