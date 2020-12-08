@@ -25,7 +25,7 @@ from frabit.config import RecoveryOptions
 from frabit.exceptions import BadXlogSegmentName, RecoveryException, SyncError
 from frabit.infofile import BackupInfo
 from frabit.server import Server
-from frabit.utils import (FlyrabbitEncoder, check_non_negative, check_positive,
+from frabit.utils import (FrabitEncoder, check_non_negative, check_positive,
                           configure_logging, drop_privileges, force_str,
                           get_log_levels, parse_log_level)
 

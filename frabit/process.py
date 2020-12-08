@@ -37,7 +37,7 @@ class ProcessInfo(object):
         self.task = task
 
 
-class ProcessManager(object):
+class ProcessManager:
     """
     Class for the management of frabit processes owned by a server
     """
@@ -56,8 +56,7 @@ class ProcessManager(object):
         self.config = config
         self.process_list = []
         # Cycle over the lock files in the lock directory for this server
-        for path in glob(os.path.join(self.config.flyrabbit_lock_directory,
-                                      '.%s-*.lock' % self.config.name)):
+        for path in glob(os.path.join(self.config.frabit_lock_directory, '.{}-*.lock'.format(self.config.name))):
             for task, lock_class in self.TASKS.items():
                 # Check the lock_name against the lock class
                 lock = lock_class.build_if_matches(path)
@@ -67,9 +66,11 @@ class ProcessManager(object):
                         pid = lock.get_owner_pid()
                     except LockFileParsingError:
                         _logger.warning(
-                            "Skipping the %s process for server %s: "
-                            "Error reading the PID from lock file '%s'",
-                            task, self.config.name, path)
+                            "Skipping the {task} process for server {name}: "
+                            "Error reading the PID from lock file '{path}'".format(
+                                task=task, name=self.config.name, path=path)
+                            )
+
                         break
                     # If there is a pid save it in the process list
                     if pid:
@@ -110,16 +111,16 @@ class ProcessManager(object):
         """
         # Try to kill the process
         try:
-            _logger.debug("Sending SIGINT to PID %s", process_info.pid)
+            _logger.debug("Sending SIGINT to PID {}".format(process_info.pid))
             os.kill(process_info.pid, signal.SIGINT)
             _logger.debug("os.kill call succeeded")
         except OSError as e:
-            _logger.debug("os.kill call failed: %s", e)
+            _logger.debug("os.kill call failed: {}".format(e))
             # The process doesn't exists. It has probably just terminated.
             if e.errno == errno.ESRCH:
                 return True
             # Something unexpected has happened
-            output.error("%s", e)
+            output.error("{}".format(e))
             return False
         # Check if the process have been killed. the fastest (and maybe safest)
         # way is to send a kill with 0 as signal.
@@ -127,19 +128,18 @@ class ProcessManager(object):
         # killed successfully, otherwise is still alive.
         for counter in range(retries):
             try:
-                _logger.debug("Checking with SIG_DFL if PID %s is still alive",
-                              process_info.pid)
+                _logger.debug("Checking with SIG_DFL if PID {} is still alive".format(process_info.pid))
                 os.kill(process_info.pid, signal.SIG_DFL)
                 _logger.debug("os.kill call succeeded")
             except OSError as e:
-                _logger.debug("os.kill call failed: %s", e)
+                _logger.debug("os.kill call failed: {}".format(e))
                 # If the process doesn't exists, we are done.
                 if e.errno == errno.ESRCH:
                     return True
                 # Something unexpected has happened
-                output.error("%s", e)
+                output.error("{}".format(e))
                 return False
             time.sleep(1)
-        _logger.debug("The PID %s has not been terminated after %s retries",
-                      process_info.pid, retries)
+        _logger.debug("The PID {pid} has not been terminated after {retries} retries".format(pid=process_info.pid,
+                                                                                             retries=retries))
         return False

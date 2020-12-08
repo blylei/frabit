@@ -49,7 +49,6 @@ BACKUP_METHOD_VALUES = ['rsync', 'mysql']
 
 
 class CsvOption(set):
-
     """
     Base class for CSV options.
 
@@ -264,15 +263,7 @@ class ServerConfig:
         'recovery_options',
         'retention_policy',
         'retention_policy_mode',
-        'reuse_backup',
         'ssh_command',
-        'streaming_archiver',
-        'streaming_archiver_batch_size',
-        'streaming_archiver_name',
-        'streaming_backup_name',
-        'streaming_conninfo',
-        'streaming_wals_directory',
-        'tablespace_bandwidth_limit',
         'wal_retention_policy',
         'wals_directory'
     ]
@@ -321,10 +312,6 @@ class ServerConfig:
         'recovery_options',
         'retention_policy',
         'retention_policy_mode',
-        'streaming_archiver',
-        'streaming_archiver_batch_size',
-        'streaming_archiver_name',
-        'streaming_backup_name',
         'wal_retention_policy'
     ]
 

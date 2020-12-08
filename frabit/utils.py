@@ -4,7 +4,7 @@
 # This file is part of Frabit
 #
 """
-This module contains common functions used in FlyRabbit.
+This module contains common functions used in Frabit.
 """
 
 import datetime
@@ -28,14 +28,6 @@ from distutils.version import Version
 from frabit.exceptions import TimeoutError
 
 _logger = logging.getLogger(__name__)
-
-
-if sys.version_info[0] >= 3:
-    _text_type = str
-    _string_types = str
-else:
-    _text_type = unicode  # noqa
-    _string_types = basestring  # noqa
 
 
 def drop_privileges(user):
@@ -95,21 +87,19 @@ def configure_logging(
                 log_file, encoding='utf-8')
         except (OSError, IOError):
             # fallback to standard error
-            warn = "Failed opening the requested log file. " \
-                   "Using standard error instead."
+            warn = "Failed opening the requested log file. Using standard error instead."
     formatter = logging.Formatter(log_format)
     handler.setFormatter(formatter)
     logging.root.addHandler(handler)
     if warn:
         # this will be always displayed because the default level is WARNING
-        _logger.warn(warn)
+        _logger.warning(warn)
     logging.root.setLevel(log_level)
 
 
 def parse_log_level(log_level):
     """
-    Convert a log level to its int representation as required by
-    logging module.
+    Convert a log level to its int representation as required by logging module.
 
     :param log_level: An integer or a string
     :return: an integer or None if an invalid argument is provided
@@ -233,8 +223,7 @@ def total_seconds(timedelta):
 
 def which(executable, path=None):
     """
-    This method is useful to find if a executable is present into the
-    os PATH
+    This method is useful to find if a executable is present into the os PATH
 
     :param str executable: The name of the executable to find
     :param str|None path: An optional search path to override the current one.
@@ -246,8 +235,7 @@ def which(executable, path=None):
     # If the path is None at this point we have nothing to search
     if path is None:
         return None
-    # If executable is an absolute path, check if it exists and is executable
-    # otherwise return failure.
+    # If executable is an absolute path, check if it exists and is executable. otherwise return failure.
     if os.path.isabs(executable):
         if os.path.exists(executable) and os.access(executable, os.X_OK):
             return executable

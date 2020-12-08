@@ -38,8 +38,7 @@ class BackupEngine(ABCMeta):
         """
         Base constructor
 
-        :param frabit.backup.BackupManager backup_manager: the BackupManager
-            assigned to the executor
+        :param frabit.backup.BackupManager backup_manager: the BackupManager assigned to the executor
         """
         super(BackupEngine, self).__init__()
         self.backup_manager = backup_manager

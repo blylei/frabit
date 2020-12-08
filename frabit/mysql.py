@@ -4,7 +4,7 @@
 # This file is part of Frabit
 #
 """
-基于mysql_connector封装对MySQL的操作接口,Frabit对MySQL的操作均通过此模块实现
+Based on mysql_connector封装对MySQL的操作接口,Frabit对MySQL的操作均通过此模块实现
 """
 import os
 import sys
@@ -34,8 +34,6 @@ from frabit.exceptions import (ConninfoException,
                                MysqlInterfaceError,
                                BackupInefficientPrivilege
                                )
-from frabit.infofile import Tablespace
-from frabit.remote_status import RemoteStatusMixin
 from frabit.utils import force_str, simplify_version, with_metaclass
 from frabit.binlog import DEFAULT_XLOG_SEG_SIZE
 
@@ -82,7 +80,7 @@ class MySQL:
             self.conn_parameters = self.parse_dsn(conninfo)
         except (ValueError, TypeError) as e:
             _logger.debug(e)
-            raise ConninfoException('Cannot connect to mysql: "{}" is not a valid connection string'.format(conninfo))
+            raise ConninfoException('Cannot connect to mysql: "{}" is a invalid connection string'.format(conninfo))
 
     @staticmethod
     def parse_dsn(dsn):
