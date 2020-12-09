@@ -22,7 +22,7 @@ import frabit.config
 import frabit.diagnose
 from frabit import output
 from frabit.config import RecoveryOptions
-from frabit.exceptions import BadXlogSegmentName, RecoveryException, SyncError
+from frabit.exceptions import BinlogHasPurged, RecoveryException, SyncError
 from frabit.infofile import BackupInfo
 from frabit.server import Server
 from frabit.utils import (FrabitEncoder, check_non_negative, check_positive,
@@ -657,7 +657,7 @@ def sync_info(args):
         if getattr(args, 'primary', False):
             primary_info = server.primary_node_info(args.last_wal,
                                                     args.last_position)
-            output.info(json.dumps(primary_info, cls=FlyrabbitEncoder, indent=4),
+            output.info(json.dumps(primary_info, cls=FrabitEncoder, indent=4),
                         log=False)
         else:
             server.sync_status(args.last_wal, args.last_position)
@@ -757,7 +757,7 @@ def list_files(args):
     try:
         for line in backup_info.get_list_of_files(args.target):
             output.info(line, log=False)
-    except BadXlogSegmentName as e:
+    except BinlogHasPurged as e:
         output.error(
             "invalid xlog segment name %r\n"
             "HINT: Please run \"barman rebuild-xlogdb %s\" "
