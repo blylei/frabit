@@ -15,7 +15,7 @@ import shutil
 from abc import ABCMeta, abstractmethod
 from contextlib import closing
 
-import frabit.infofile
+import frabit.info
 from frabit.command_wrappers import Command
 from frabit.exceptions import (CommandFailedException,
                                CompressionIncompatibility)
@@ -78,7 +78,7 @@ class CompressionManager(object):
         :param str filename: the path of the file to identify
         :rtype: barman.infofile.WalFileInfo
         """
-        return frabit.infofile.WalFileInfo.from_file(filename, self.unidentified_compression)
+        return frabit.info.WalFileInfo.from_file(filename, self.unidentified_compression)
 
 
 def identify_compression(filename):

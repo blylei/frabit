@@ -12,7 +12,7 @@ from glob import glob
 
 from frabit import output
 from frabit.exceptions import LockFileParsingError
-from frabit.lockfile import ServerWalReceiveLock
+from frabit.lock import ServerWalReceiveLock
 
 _logger = logging.getLogger(__name__)
 

@@ -39,11 +39,11 @@ from frabit.exceptions import (ArchiverFailure, BadXlogSegmentName,
                                MysqlUnsupportedFeature, SyncError,
                                SyncNothingToDo, SyncToBeDeleted, TimeoutError,
                                UnknownBackupIdException)
-from frabit.infofile import BackupInfo, LocalBackupInfo, WalFileInfo
-from frabit.lockfile import (ServerBackupIdLock, ServerBackupLock,
-                             ServerBackupSyncLock, ServerCronLock,
-                             ServerWalArchiveLock, ServerWalReceiveLock,
-                             ServerBinlogSyncLock, ServerXLOGDBLock)
+from frabit.info import BackupInfo, LocalBackupInfo, WalFileInfo
+from frabit.lock import (ServerBackupIdLock, ServerBackupLock,
+                         ServerBackupSyncLock, ServerCronLock,
+                         ServerWalArchiveLock, ServerWalReceiveLock,
+                         ServerBinlogSyncLock, ServerXLOGDBLock)
 from frabit.mysql import MySQLConnection, StreamingConnection
 from frabit.process import ProcessManager
 from frabit.remote_status import RemoteStatusMixin
@@ -1277,7 +1277,7 @@ class Server(RemoteStatusMixin):
         it returns None.
 
         :param str|None backup_id: the ID of the backup to return
-        :rtype: frabit.infofile.LocalBackupInfo|None
+        :rtype: frabit.info.LocalBackupInfo|None
         """
         return self.backup_manager.get_backup(backup_id)
 
@@ -1427,7 +1427,7 @@ class Server(RemoteStatusMixin):
         """
         Returns information about WALs for the given backup
 
-        :param frabit.infofile.LocalBackupInfo backup_info: the target backup
+        :param frabit.info.LocalBackupInfo backup_info: the target backup
         """
         begin = backup_info.begin_wal
         end = backup_info.end_wal
@@ -1508,7 +1508,7 @@ class Server(RemoteStatusMixin):
         """
         Performs a recovery of a backup
 
-        :param frabit.infofile.LocalBackupInfo backup_info: the backup
+        :param frabit.info.LocalBackupInfo backup_info: the backup
             to recover
         :param str dest: the destination directory
         :param dict[str,str]|None tablespaces: a tablespace
@@ -2887,7 +2887,7 @@ class Server(RemoteStatusMixin):
 
         :param str backup_name: str name of the backup to sync
         :param dict primary_info: dict containing the Primary node status
-        :param frabit.infofile.BackupInfo local_backup_info: BackupInfo object
+        :param frabit.info.BackupInfo local_backup_info: BackupInfo object
                 representing the current backup state
 
         :raise SyncError: There is an error in the user request

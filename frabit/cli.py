@@ -23,7 +23,7 @@ import frabit.diagnose
 from frabit import output
 from frabit.config import RecoveryOptions
 from frabit.exceptions import BinlogHasPurged, RecoveryException, SyncError
-from frabit.infofile import BackupInfo
+from frabit.info import BackupInfo
 from frabit.server import Server
 from frabit.utils import (FrabitEncoder, check_non_negative, check_positive,
                           configure_logging, drop_privileges, force_str,
