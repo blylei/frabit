@@ -5,7 +5,7 @@
 #
 
 """
-This module is responsible to manage the compression features of Barman
+This module is responsible to manage the compression features of Frabit
 """
 
 import bz2
@@ -78,9 +78,7 @@ class CompressionManager(object):
         :param str filename: the path of the file to identify
         :rtype: barman.infofile.WalFileInfo
         """
-        return barman.infofile.WalFileInfo.from_file(
-            filename,
-            self.unidentified_compression)
+        return frabit.infofile.WalFileInfo.from_file(filename, self.unidentified_compression)
 
 
 def identify_compression(filename):
