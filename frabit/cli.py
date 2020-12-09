@@ -103,9 +103,7 @@ def cron(keep_descriptors=False):
             # should never be executed. However, it is here to protect
             # unrelated servers in case of unexpected failures.
             output.exception(
-                "Unable to run cron on server '%s', "
-                "please look in the frabit log file for more details.",
-                name)
+                "Unable to run cron on server '{}',please look in the frabit log file for more details.".format(name))
 
     output.close_and_exit()
 
@@ -471,16 +469,6 @@ def recover(args):
         server.config.parallel_jobs = args.jobs
     if hasattr(args, 'bwlimit'):
         server.config.bandwidth_limit = args.bwlimit
-
-    # PostgreSQL supports multiple parameters to specify when the recovery
-    # process will end, and in that case the last entry in recovery
-    # configuration files will be used. See [1]
-    #
-    # Since the meaning of the target options is not dependent on the order
-    # of parameters, we decided to make the target options mutually exclusive.
-    #
-    # [1]: https://www.postgresql.org/docs/current/static/
-    #   recovery-target-settings.html
 
     target_options = ['target_tli', 'target_time', 'target_xid',
                       'target_lsn', 'target_name', 'target_immediate']
