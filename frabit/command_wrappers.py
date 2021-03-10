@@ -771,14 +771,13 @@ class XtraBackup(MySQLClient):
     Wrapper class for the xtrabackup system command
     """
 
-    COMMAND_ALTERNATIVES = ['xtrabackup']
+    COMMAND_ALTERNATIVES = ['xtrabackup', 'innobackupex']
 
     def __init__(self,
                  connection,
                  targetdir,
                  command,
                  version=None,
-                 app_name=None,
                  check=True,
                  args=None,
                  **kwargs):
@@ -789,7 +788,6 @@ class XtraBackup(MySQLClient):
         :param str targetdir: destination directory path
         :param str command: the command to use
         :param Version version: the command version
-        :param str app_name: the application name to use for the connection
         :param str bwlimit: bandwidth limit for pg_basebackup
         :param Dict[str, str] tbs_mapping: used for tablespace
         :param bool check: check if the return value is in the list of allowed values of the Command obj
