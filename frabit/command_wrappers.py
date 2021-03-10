@@ -793,8 +793,7 @@ class XtraBackup(MySQLClient):
         :param bool check: check if the return value is in the list of allowed values of the Command obj
         :param List[str] args: additional arguments
         """
-        MySQLClient.__init__(self, connection=connection, command=command, version=version, app_name=app_name,
-                             check=check, **kwargs)
+        MySQLClient.__init__(self, connection=connection, command=command, version=version, check=check, **kwargs)
 
         # Set the backup destination
         self.args += ['-v', '--no-password', '--targetdir={}'.format(targetdir)]
